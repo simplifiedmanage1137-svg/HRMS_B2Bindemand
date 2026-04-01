@@ -1987,14 +1987,14 @@ const AdminDashboard = () => {
                 <FaBalanceScale className="me-2 text-dark" />
                 <span>Employee Leave Balances</span>
               </h5>
-              <div className="d-flex gap-2">
+              {/* <div className="d-flex gap-2">
                 <Badge bg="info" className="px-3 py-2">
                   Avg: {averageLeavesPerEmployee} days
                 </Badge>
                 <Badge bg="warning" className="px-3 py-2">
                   Low Balance: {employeesWithLowBalance}
                 </Badge>
-              </div>
+              </div> */}
             </Card.Header>
             <Card.Body>
               <Row className="mb-3 g-2">
