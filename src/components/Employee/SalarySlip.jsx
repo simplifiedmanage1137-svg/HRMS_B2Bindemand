@@ -184,28 +184,50 @@ const SalarySlip = () => {
     try {
       setLoading(true);
       const response = await axios.get(API_ENDPOINTS.SALARY_EMPLOYEE(user.employeeId));
-      const allSlips = response.data.salarySlips || [];
 
-      setSalarySlips(allSlips);
-      setAllSalarySlips(allSlips);
-      const lastFive = getLastFiveSlips(allSlips);
-      setDisplaySlips(lastFive);
+      // Check if the response has the expected structure
+      if (response.data.success) {
+        const allSlips = response.data.salarySlips || [];
+        setSalarySlips(allSlips);
+        setAllSalarySlips(allSlips);
+        const lastFive = getLastFiveSlips(allSlips);
+        setDisplaySlips(lastFive);
 
-      if (response.data.joiningInfo) {
-        setJoiningInfo(response.data.joiningInfo);
-        generateEligibleMonths(response.data.joiningInfo);
-        setTimeout(() => generateYearOptions(), 100);
+        if (response.data.joiningInfo) {
+          setJoiningInfo(response.data.joiningInfo);
+          generateEligibleMonths(response.data.joiningInfo);
+          setTimeout(() => generateYearOptions(), 100);
+        }
+      } else {
+        // Show message if any
+        if (response.data.message) {
+          setMessage({
+            type: 'info',
+            text: response.data.message
+          });
+        }
       }
     } catch (error) {
       console.error('Error fetching salary slips:', error);
-      setMessage({
-        type: 'danger',
-        text: error.response?.data?.message || 'Failed to load salary slips'
-      });
+
+      // Check if it's a 404 or table not exists error
+      if (error.response?.status === 500 &&
+        error.response?.data?.error?.includes('does not exist')) {
+        setMessage({
+          type: 'info',
+          text: 'Salary slips feature is being set up. Please check back later.'
+        });
+      } else {
+        setMessage({
+          type: 'danger',
+          text: error.response?.data?.message || 'Failed to load salary slips'
+        });
+      }
     } finally {
       setLoading(false);
     }
   };
+
 
   const isMonthEligible = (month, year) => {
     if (!joiningInfo) return true;
@@ -380,7 +402,7 @@ const SalarySlip = () => {
       pdfContentDiv.style.padding = '20px';
       pdfContentDiv.style.fontFamily = 'Arial, sans-serif';
       pdfContentDiv.style.backgroundColor = 'white';
-      
+
       pdfContentDiv.innerHTML = `
         <div style="text-align: center; margin-bottom: 20px;">
           ${logoBase64 ? `<img src="data:image/png;base64,${logoBase64}" style="height: 60px; width: auto; margin-bottom: 10px; object-fit: contain;" />` : ''}
@@ -566,6 +588,21 @@ const SalarySlip = () => {
   const getMonthName = (monthNumber) => {
     const month = months.find(m => m.value === parseInt(monthNumber));
     return month ? month.label : 'Unknown';
+  };
+
+  const formatCycleDates = (slip) => {
+    if (slip.cycle_start_date && slip.cycle_end_date) {
+      return `${formatDate(slip.cycle_start_date)} to ${formatDate(slip.cycle_end_date)}`;
+    }
+    return `${getMonthName(slip.month)} ${slip.year}`;
+  };
+
+  const formatShortDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric'
+    });
   };
 
   const selectedSlipAmounts = selectedSlip ? getSlipAmounts(selectedSlip) : { basicSalary: 0, deduction: 0, netSalary: 0, overtimeAmount: 0, overtimeHours: 0 };
@@ -813,7 +850,7 @@ const SalarySlip = () => {
             <Card.Header className="bg-light text-dark py-2 d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center gap-2">
               <h6 className="mb-0 fw-semibold small d-flex align-items-center">
                 <FaHistory className="me-2" size={14} />
-                Salary Slip History 
+                Salary Slip History
               </h6>
               <div className="d-flex flex-wrap gap-2 ms-0 ms-sm-auto">
                 <Badge bg="light" text="dark" className="px-2 py-1 small text-nowrap">
@@ -824,6 +861,104 @@ const SalarySlip = () => {
                 </Badge>
               </div>
             </Card.Header>
+
+            <Card.Body className="p-0">
+              <div className="table-responsive" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                <Table hover className="mb-0 table-sm">
+                  {/* REPLACE THIS ENTIRE THEAD SECTION */}
+                  <thead className="bg-light sticky-top" style={{ top: 0, zIndex: 10 }}>
+                    <tr className="small">
+                      <th className="fw-normal text-center" style={{ width: '50px' }}>#</th>
+                      <th className="fw-normal">Month</th>
+                      <th className="fw-normal d-none d-md-table-cell">Cycle</th>  {/* NEW COLUMN */}
+                      <th className="fw-normal text-end d-none d-md-table-cell">Basic</th>
+                      <th className="fw-normal text-end">OT Hrs</th>
+                      <th className="fw-normal text-end d-none d-lg-table-cell">OT Amt</th>
+                      <th className="fw-normal text-end">DT</th>
+                      <th className="fw-normal text-end">Net</th>
+                      <th className="fw-normal text-center">Action</th>
+                    </tr>
+                  </thead>
+
+                  {/* REPLACE THE TBODY SECTION */}
+                  <tbody>
+                    {displaySlips.length > 0 ? (
+                      displaySlips.map((slip, index) => {
+                        const isCurrentMonth = slip.month === currentMonth && slip.year === currentYear;
+                        const { basicSalary, deduction, netSalary, overtimeAmount, overtimeHours } = getSlipAmounts(slip);
+
+                        // ADD THIS LINE - Format cycle text
+                        const cycleText = slip.cycle_start_date && slip.cycle_end_date
+                          ? `${formatShortDate(slip.cycle_start_date)} - ${formatShortDate(slip.cycle_end_date)}`
+                          : `${getMonthName(slip.month)} ${slip.year}`;
+
+                        return (
+                          <tr key={slip.id} className={isCurrentMonth ? 'table-primary' : ''}>
+                            <td className="text-center small">{index + 1}</td>
+                            <td className="small">
+                              <Badge bg="primary" className="px-2 py-1 small text-nowrap">
+                                {getMonthName(slip.month).substring(0, 3)}
+                                {isCurrentMonth && ' (C)'}
+                              </Badge>
+                            </td>
+                            {/* ADD THIS NEW COLUMN - Cycle Info */}
+                            <td className="small d-none d-md-table-cell text-truncate" style={{ maxWidth: '120px' }}>
+                              <small className="text-muted">{cycleText}</small>
+                            </td>
+                            <td className="text-primary fw-bold small text-end d-none d-md-table-cell">
+                              ₹{formatCurrency(basicSalary)}
+                            </td>
+                            <td className="small text-end">
+                              <Badge bg={overtimeHours > 0 ? "success" : "secondary"} pill className="text-nowrap">
+                                {overtimeHours || 0}h
+                              </Badge>
+                            </td>
+                            <td className="small text-end d-none d-lg-table-cell">
+                              <span className={overtimeAmount > 0 ? "text-success text-nowrap" : "text-nowrap"}>
+                                {overtimeAmount > 0 ? '+' : ''}₹{formatCurrency(overtimeAmount)}
+                              </span>
+                            </td>
+                            <td className="text-danger small text-end">₹{formatCurrency(deduction)}</td>
+                            <td className="small text-end text-nowrap">
+                              <span className="text-success fw-bold">₹{formatCurrency(netSalary)}</span>
+                            </td>
+                            <td className="text-center">
+                              <div className="d-flex gap-1 justify-content-center">
+                                <Button
+                                  variant="outline-primary"
+                                  size="sm"
+                                  onClick={() => handleViewSlip(slip)}
+                                  className="p-1"
+                                  title="View Slip"
+                                >
+                                  <FaEye size={10} />
+                                </Button>
+                                <Button
+                                  variant="outline-success"
+                                  size="sm"
+                                  onClick={() => handleDownloadPDF(slip)}
+                                  title="Download PDF"
+                                  className="p-1"
+                                >
+                                  <FaDownload size={10} />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan="9" className="text-center py-4">
+                          {/* ... existing empty state code ... */}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </Table>
+              </div>
+            </Card.Body>
+
             <Card.Body className="p-0">
               {/* Table with Vertical Scroll */}
               <div className="table-responsive" style={{ maxHeight: '300px', overflowY: 'auto' }}>
@@ -979,6 +1114,7 @@ const SalarySlip = () => {
       </Row>
 
       {/* Salary Slip Modal - Responsive */}
+      {/* Salary Slip Modal - Responsive */}
       <Modal
         show={showSlipModal}
         onHide={() => setShowSlipModal(false)}
@@ -1052,6 +1188,19 @@ const SalarySlip = () => {
                 </tbody>
               </table>
 
+              {/* ✅ ADD THIS NEW SECTION - Cycle Info Card */}
+              <div className="mb-3 p-2 bg-light rounded small">
+                <strong>Salary Cycle:</strong> {formatCycleDates(selectedSlip)}
+                <br />
+                <strong>Working Days:</strong> {selectedSlip.total_working_days || 0} days
+                <br />
+                <strong>Present:</strong> {selectedSlip.present_days || 0} days
+                <br />
+                <strong>Unpaid Leave:</strong> {selectedSlip.unpaid_leave_days || 0} days
+                <br />
+                <strong>Per Day Salary:</strong> ₹{formatCurrency(selectedSlip.per_day_salary || 0)}
+              </div>
+
               {/* Earnings Table */}
               <div className="table-responsive">
                 <table className="w-100 mb-3" style={{ fontSize: '12px', borderCollapse: 'collapse' }}>
@@ -1075,8 +1224,8 @@ const SalarySlip = () => {
                           Overtime ({selectedSlipAmounts.overtimeHours || 0} hrs @ ₹150/hr)
                         </span>
                       </td>
-                      <td className="text-end py-1 pe-2" 
-                          style={selectedSlipAmounts.overtimeAmount > 0 ? { color: '#28a745', fontWeight: 'bold' } : {}}>
+                      <td className="text-end py-1 pe-2"
+                        style={selectedSlipAmounts.overtimeAmount > 0 ? { color: '#28a745', fontWeight: 'bold' } : {}}>
                         {selectedSlipAmounts.overtimeAmount > 0 ? '+ ' : ''}{formatCurrency(selectedSlipAmounts.overtimeAmount)}
                       </td>
                     </tr>
@@ -1127,8 +1276,8 @@ const SalarySlip = () => {
 
               {/* Calculation - Always show Overtime term */}
               <div className="bg-light p-2 mb-3 rounded small">
-                <strong>Calculation:</strong> Basic Salary (₹{formatCurrency(selectedSlipAmounts.basicSalary)}) 
-                + Overtime (₹{formatCurrency(selectedSlipAmounts.overtimeAmount)}) 
+                <strong>Calculation:</strong> Basic Salary (₹{formatCurrency(selectedSlipAmounts.basicSalary)})
+                + Overtime (₹{formatCurrency(selectedSlipAmounts.overtimeAmount)})
                 - DT Deduction (₹{formatCurrency(selectedSlipAmounts.deduction)}) = Net Salary (₹{formatCurrency(selectedSlipAmounts.netSalary)})
               </div>
 

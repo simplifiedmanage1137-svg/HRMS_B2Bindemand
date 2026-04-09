@@ -226,6 +226,17 @@ const Attendance = () => {
       return <Badge bg="secondary" className="px-2 py-1"><FaClock className="me-1" size={10} /> Not Clocked</Badge>;
     }
 
+    // ✅ If they have BOTH clock_in AND clock_out, they completed their shift
+    if (record.clock_in && record.clock_out) {
+      if (record.status === 'half_day') {
+        return <Badge bg="warning" className="text-dark px-2 py-1"><FaCloudSun className="me-1" size={10} /> Half Day</Badge>;
+      }
+      if (record.late_minutes > 0) {
+        return <Badge bg="warning" className="px-2 py-1 text-dark"><FaExclamationTriangle className="me-1" size={10} /> Late ({formatLateTime(record.late_minutes)})</Badge>;
+      }
+      return <Badge bg="success" className="px-2 py-1"><FaCheckCircle className="me-1" size={10} /> Present</Badge>;
+    }
+
     if (isToday && record.clock_in && !record.clock_out) {
       if (record.late_minutes > 0) {
         return <Badge bg="warning" className="px-2 py-1 text-dark"><FaExclamationTriangle className="me-1" size={10} /> Late ({formatLateTime(record.late_minutes)})</Badge>;

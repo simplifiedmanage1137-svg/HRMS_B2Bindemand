@@ -147,10 +147,57 @@ const EmployeeDashboard = () => {
     }
   }, [user]);
 
-  // Update charts when data changes
+  // ✅ Recalculate stats from attendance history whenever it changes
+  const recalculateAttendanceStats = () => {
+    if (!attendanceHistory || attendanceHistory.length === 0) return;
+
+    let presentDays = 0;
+    let absentDays = 0;
+    let halfDays = 0;
+    let weeklyOffDays = 0;
+    let totalWorkingHours = 0;
+
+    attendanceHistory.forEach(record => {
+      const dateObj = new Date(record.attendance_date);
+      const dayOfWeek = dateObj.getDay();
+      const isWeeklyOff = dayOfWeek === 0 || dayOfWeek === 6; // Sunday or Saturday
+
+      if (isWeeklyOff) {
+        weeklyOffDays++;
+      } else {
+        // Working day - check status
+        if (record.status === 'present' || record.status === 'working' || record.clock_in) {
+          presentDays++;
+          if (record.total_hours) {
+            totalWorkingHours += parseFloat(record.total_hours);
+          }
+        } else if (record.status === 'half_day') {
+          halfDays++;
+          presentDays++; // Half day counts as present
+          if (record.total_hours) {
+            totalWorkingHours += parseFloat(record.total_hours);
+          }
+        } else if (record.status === 'absent' || !record.clock_in) {
+          absentDays++;
+        }
+      }
+    });
+
+    setStats(prev => ({
+      ...prev,
+      presentDays,
+      absentDays,
+      halfDays,
+      weeklyOffDays,
+      totalWorkingHours: Math.round(totalWorkingHours * 10) / 10
+    }));
+  };
+
+  // Update charts and stats when data changes
   useEffect(() => {
     if (attendanceHistory.length > 0) {
       updateAttendanceChart();
+      recalculateAttendanceStats(); // ✅ Recalculate stats on every attendance change
     }
     if (leaveBalance) {
       updateLeaveChart();
@@ -222,6 +269,7 @@ const EmployeeDashboard = () => {
       setLoading(false);
     }
   };
+  
 
   const refreshData = async () => {
     setRefreshing(true);
@@ -345,29 +393,35 @@ const EmployeeDashboard = () => {
     }
   };
 
+  // Replace the fetchAttendanceHistory function in Dashboard.jsx with this:
 
   const fetchAttendanceHistory = async () => {
     try {
       const today = new Date();
-      const currentYear = today.getFullYear();
-      const currentMonth = today.getMonth(); // 0-11
 
-      // Get first day of current month
-      const startDate = new Date(currentYear, currentMonth, 1);
-      // Get last day of current month
-      const endDate = new Date(currentYear, currentMonth + 1, 0);
+      // Calculate cycle dates (26th of current month to 25th of next month)
+      let cycleStartDate, cycleEndDate;
 
-      const startDateStr = startDate.toISOString().split('T')[0];
-      const endDateStr = endDate.toISOString().split('T')[0];
+      if (today.getDate() >= 26) {
+        // If today is 26th or later, cycle is from 26th current month to 25th next month
+        cycleStartDate = new Date(today.getFullYear(), today.getMonth(), 26);
+        cycleEndDate = new Date(today.getFullYear(), today.getMonth() + 1, 25);
+      } else {
+        // If today is before 26th, cycle is from 26th previous month to 25th current month
+        cycleStartDate = new Date(today.getFullYear(), today.getMonth() - 1, 26);
+        cycleEndDate = new Date(today.getFullYear(), today.getMonth(), 25);
+      }
 
-      console.log('📅 Fetching attendance for current month:', {
+      const startDateStr = cycleStartDate.toISOString().split('T')[0];
+      const endDateStr = cycleEndDate.toISOString().split('T')[0];
+
+      console.log('📅 Fetching attendance for cycle:', {
         start: startDateStr,
         end: endDateStr,
-        month: currentMonth + 1,
-        year: currentYear
+        cycle: `${startDateStr} to ${endDateStr}`
       });
 
-      // ✅ FIX: Use employee-specific endpoint instead of admin report
+      // ✅ Use employee-specific endpoint
       const url = `${API_ENDPOINTS.ATTENDANCE_EMPLOYEE_REPORT(user.employeeId, startDateStr, endDateStr)}`;
       console.log('📡 API URL:', url);
 
@@ -375,60 +429,97 @@ const EmployeeDashboard = () => {
       console.log('📊 API Response:', response.data);
 
       const attendance = response.data.attendance || [];
-      console.log('📊 Attendance records for current month:', attendance.length);
+      console.log('📊 Attendance records for cycle:', attendance.length);
 
-      // Calculate present days for current month only
+      // Get all dates in the cycle
+      const cycleDays = [];
+      let currentDate = new Date(cycleStartDate);
+
+      while (currentDate <= cycleEndDate) {
+        cycleDays.push(new Date(currentDate));
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+
+      // Initialize counters
       let presentDays = 0;
       let halfDays = 0;
       let weeklyOff = 0;
       let absent = 0;
       let totalWorkingHours = 0;
+      let totalWorkingDaysCount = 0;
 
-      // Get all dates in current month
-      const daysInMonth = endDate.getDate();
-
-      for (let day = 1; day <= daysInMonth; day++) {
-        const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        const date = new Date(currentYear, currentMonth, day);
+      // For each day in the cycle, determine attendance status
+      for (const date of cycleDays) {
+        const dateStr = date.toISOString().split('T')[0];
         const dayOfWeek = date.getDay();
-        const isWeeklyOff = dayOfWeek === 0 || dayOfWeek === 6;
+        const isWeeklyOff = dayOfWeek === 0 || dayOfWeek === 6; // Sunday or Saturday
 
         // Find attendance record for this date
         const record = attendance.find(r => r.attendance_date === dateStr);
 
         if (isWeeklyOff) {
+          // Weekly off - don't count as absent
           weeklyOff++;
-        } else if (record) {
-          // Check if present (status 'present' or 'working' or clock_in exists)
-          if (record.status === 'present' || record.status === 'working' || record.clock_in) {
-            presentDays++;
-            if (record.total_hours) {
-              totalWorkingHours += parseFloat(record.total_hours);
-            }
-          } else if (record.status === 'half_day') {
-            halfDays++;
-            presentDays++; // Half day is also counted as present
-            if (record.total_hours) {
-              totalWorkingHours += parseFloat(record.total_hours);
-            }
-          } else if (record.status === 'absent') {
-            absent++;
-          }
+          console.log(`📅 ${dateStr} (${date.toLocaleDateString('en-US', { weekday: 'long' })}): Weekly Off`);
         } else {
-          // No record means absent
-          absent++;
+          // Working day - count as present or absent
+          totalWorkingDaysCount++;
+
+          if (record) {
+            // Check if present (status 'present', 'working', or has clock_in)
+            if (record.status === 'present' || record.status === 'working' || record.clock_in) {
+              presentDays++;
+              console.log(`✅ ${dateStr}: Present (${record.status || 'working'})`);
+
+              if (record.total_hours) {
+                totalWorkingHours += parseFloat(record.total_hours);
+              }
+            }
+            else if (record.status === 'half_day') {
+              halfDays++;
+              presentDays++; // Half day is also counted as present
+              console.log(`🌓 ${dateStr}: Half Day`);
+
+              if (record.total_hours) {
+                totalWorkingHours += parseFloat(record.total_hours);
+              }
+            }
+            else if (record.status === 'absent') {
+              absent++;
+              console.log(`❌ ${dateStr}: Absent (marked in system)`);
+            }
+            else {
+              // Has record but status is not set properly - check if clock_in exists
+              if (record.clock_in) {
+                presentDays++;
+                console.log(`✅ ${dateStr}: Present (has clock_in)`);
+                if (record.total_hours) {
+                  totalWorkingHours += parseFloat(record.total_hours);
+                }
+              } else {
+                absent++;
+                console.log(`❌ ${dateStr}: Absent (no clock_in)`);
+              }
+            }
+          } else {
+            // No record means absent
+            absent++;
+            console.log(`❌ ${dateStr}: Absent (no record)`);
+          }
         }
       }
 
-      const totalWorkingDays = daysInMonth - weeklyOff;
-
-      console.log('📊 Monthly Stats:', {
+      console.log('📊 Cycle Stats Summary:', {
+        cycle: `${startDateStr} to ${endDateStr}`,
+        totalDaysInCycle: cycleDays.length,
+        workingDays: totalWorkingDaysCount,
+        weeklyOffDays: weeklyOff,
         presentDays: presentDays,
         halfDays: halfDays,
         absentDays: absent,
-        weeklyOff: weeklyOff,
-        totalWorkingDays: totalWorkingDays,
-        totalWorkingHours: Math.round(totalWorkingHours * 10) / 10
+        totalWorkingHours: Math.round(totalWorkingHours * 10) / 10,
+        // Verification
+        verification: `${presentDays + absent} working days accounted (should equal ${totalWorkingDaysCount})`
       });
 
       setStats(prev => ({
@@ -438,7 +529,7 @@ const EmployeeDashboard = () => {
         halfDays: halfDays,
         weeklyOffDays: weeklyOff,
         totalWorkingHours: Math.round(totalWorkingHours * 10) / 10,
-        totalWorkingDays: totalWorkingDays
+        totalWorkingDays: totalWorkingDaysCount
       }));
 
     } catch (error) {
@@ -901,6 +992,23 @@ const EmployeeDashboard = () => {
               </div>
               {/* Optional: Show loading indicator while fetching */}
               {loading && <Spinner size="sm" animation="border" className="mt-2" />}
+            </Card.Body>
+          </Card>
+        </Col>
+
+        <Col xs={12} sm={6} md={3}>
+          <Card className="border-0 shadow-sm h-100">
+            <Card.Body className="p-2 p-md-3">
+              <div className="d-flex justify-content-between align-items-start">
+                <div className="overflow-hidden">
+                  <p className="text-muted small mb-1 text-truncate">Absent Days</p>
+                  <h4 className="mb-0 fw-bold text-danger">{stats.absentDays || 0}</h4>
+                  <small className="text-muted text-truncate d-block">This month</small>
+                </div>
+                <div className="bg-danger bg-opacity-10 p-2 rounded-circle flex-shrink-0">
+                  <FaTimesCircle className="text-danger" size={20} />
+                </div>
+              </div>
             </Card.Body>
           </Card>
         </Col>

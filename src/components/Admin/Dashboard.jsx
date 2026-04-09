@@ -126,8 +126,8 @@ const RegularizationRequests = ({ onRequestCountChange }) => {
 
   const handleApprove = async () => {
     console.log('Selected Request:', selectedRequest);
-console.log('Request ID being sent:', selectedRequest.id);
-console.log('Request ID type:', typeof selectedRequest.id);
+    console.log('Request ID being sent:', selectedRequest.id);
+    console.log('Request ID type:', typeof selectedRequest.id);
     if (!selectedRequest) return;
     if (!approvedTime) {
       setMessage({ type: 'warning', text: 'Please select clock-out time' });
@@ -874,7 +874,14 @@ const AdminDashboard = () => {
       const balancesPromises = employees.map(async (emp) => {
         try {
           const balanceRes = await axios.get(API_ENDPOINTS.LEAVE_BALANCE(emp.employee_id));
-          console.log(`Leave balance for ${emp.employee_id}:`, balanceRes.data);
+          console.log(`✅ Leave balance for ${emp.employee_id} (${emp.first_name}):`, {
+            total_accrued: balanceRes.data.total_accrued,
+            used: balanceRes.data.used,
+            pending: balanceRes.data.pending,
+            available: balanceRes.data.available,
+            months_completed_in_year: balanceRes.data.months_completed_in_year,
+            is_probation_complete: balanceRes.data.is_probation_complete
+          });
 
           // Ensure we have all required fields with proper structure
           return {
@@ -885,13 +892,14 @@ const AdminDashboard = () => {
               used: parseFloat(balanceRes.data.used) || 0,
               pending: parseFloat(balanceRes.data.pending) || 0,
               comp_off_balance: parseFloat(balanceRes.data.comp_off_balance) || 0,
-              months_completed: balanceRes.data.months_completed || 0,
+              months_completed: balanceRes.data.months_completed_in_year || balanceRes.data.months_completed || 0,
+              total_months_from_joining: balanceRes.data.total_months_from_joining || 0,
               is_probation_complete: balanceRes.data.is_probation_complete || false,
               is_eligible: balanceRes.data.is_eligible || false
             }
           };
         } catch (error) {
-          console.error(`Error fetching leave balance for ${emp.employee_id}:`, error);
+          console.error(`❌ Error fetching leave balance for ${emp.employee_id}:`, error);
           // Return default balance structure
           return {
             ...emp,
@@ -902,6 +910,7 @@ const AdminDashboard = () => {
               pending: 0,
               comp_off_balance: 0,
               months_completed: 0,
+              total_months_from_joining: 0,
               is_probation_complete: false,
               is_eligible: false
             }
@@ -910,10 +919,12 @@ const AdminDashboard = () => {
       });
 
       const employeesWithBalance = await Promise.all(balancesPromises);
-      console.log('Employees with balance:', employeesWithBalance.map(e => ({
-        name: `${e.first_name} ${e.last_name}`,
-        available: e.leaveBalance?.available
-      })));
+
+      // Debug: Log final balances
+      console.log('\n📊 FINAL LEAVE BALANCES:');
+      employeesWithBalance.forEach(emp => {
+        console.log(`${emp.employee_id} | ${emp.first_name} ${emp.last_name}: Total Accrued = ${emp.leaveBalance?.total_accrued}, Available = ${emp.leaveBalance?.available}`);
+      });
 
       setEmployeeLeaveBalances(employeesWithBalance);
 
@@ -1160,13 +1171,45 @@ const AdminDashboard = () => {
 
   const updateStats = (attendanceData) => {
     const total = totalEmployees;
-    const present = attendanceData.filter(a => a.status === 'present').length;
-    const halfDay = attendanceData.filter(a => a.status === 'half_day').length;
-    const working = attendanceData.filter(a => a.status === 'working' || (a.clock_in && !a.clock_out)).length;
-    const late = attendanceData.filter(a => parseFloat(a.late_minutes) > 0).length;
+
+    // ✅ FIXED: Prioritize clock_in/clock_out over status field
+    // If employee has BOTH clock_in AND clock_out, they're NOT absent
+    let present = 0;
+    let halfDay = 0;
+    let working = 0;
+    let absent = 0;
+    let late = 0;
+
+    attendanceData.forEach(a => {
+      // If they have both clock_in and clock_out, they completed their shift
+      if (a.clock_in && a.clock_out) {
+        if (a.status === 'half_day') {
+          halfDay++;
+        } else {
+          present++;
+        }
+        if (parseFloat(a.late_minutes) > 0) {
+          late++;
+        }
+      }
+      // If they're still working or only have clock_in (no clock_out)
+      else if (a.clock_in && !a.clock_out) {
+        working++;
+        if (parseFloat(a.late_minutes) > 0) {
+          late++;
+        }
+      }
+      // Only mark as absent if they have NO clock_in at all
+      else if (!a.clock_in) {
+        absent++;
+      }
+    });
+
     const onLeave = attendanceData.filter(a => a.is_on_leave || a.status === 'on_leave').length;
     const totalPresent = present + halfDay + working;
-    let absent = total - totalPresent - onLeave;
+
+    // Recalculate absent: those who are not present, not on leave, and have no clock_in
+    absent = total - totalPresent - onLeave;
     absent = absent < 0 ? 0 : absent;
 
     setStats({
@@ -1334,7 +1377,7 @@ const AdminDashboard = () => {
           <h4 className="mb-1 d-flex align-items-center flex-wrap">
             <FaUsers className="me-2 text-dark" />
             <span>Admin Dashboard</span>
-            
+
           </h4>
           <p className="text-muted mb-0 small d-flex align-items-center flex-wrap">
             <FaClock className="me-1" size={12} />
@@ -1981,88 +2024,32 @@ const AdminDashboard = () => {
           </Card>
 
           {/* Employee Leave Balances */}
+          {/* Employee Leave Balances */}
           <Card className="mb-4 border-0 shadow-sm">
             <Card.Header className="bg-white d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center py-3 gap-2">
               <h5 className="mb-0 d-flex align-items-center">
                 <FaBalanceScale className="me-2 text-dark" />
                 <span>Employee Leave Balances</span>
               </h5>
-              {/* <div className="d-flex gap-2">
+              <div className="d-flex gap-2">
                 <Badge bg="info" className="px-3 py-2">
-                  Avg: {averageLeavesPerEmployee} days
+                  Total Accrued: {employeeLeaveBalances.reduce((sum, emp) => sum + (parseFloat(emp.leaveBalance?.total_accrued) || 0), 0).toFixed(1)} days
                 </Badge>
-                <Badge bg="warning" className="px-3 py-2">
-                  Low Balance: {employeesWithLowBalance}
-                </Badge>
-              </div> */}
+              </div>
             </Card.Header>
             <Card.Body>
-              <Row className="mb-3 g-2">
-                <Col xs={12} md={4}>
-                  <div className="d-flex align-items-center bg-light rounded-3 p-1">
-                    <FaSearch className="ms-2 text-muted" size={14} />
-                    <Form.Control
-                      type="text"
-                      placeholder="Search by name, ID, department..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="border-0 bg-transparent"
-                      size="sm"
-                    />
-                  </div>
-                </Col>
-                <Col xs={6} md={3}>
-                  <Form.Select
-                    size="sm"
-                    value={filterDepartment}
-                    onChange={(e) => setFilterDepartment(e.target.value)}
-                  >
-                    <option value="all">All Departments</option>
-                    {departments.filter(d => d !== 'all').map(dept => (
-                      <option key={dept} value={dept}>{dept}</option>
-                    ))}
-                  </Form.Select>
-                </Col>
-                <Col xs={6} md={3}>
-                  <Form.Select
-                    size="sm"
-                    value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value)}
-                  >
-                    <option value="name">Sort by Name</option>
-                    <option value="balance">Sort by Balance</option>
-                    <option value="department">Sort by Department</option>
-                  </Form.Select>
-                </Col>
-                <Col xs={12} md={2}>
-                  <Button
-                    variant="outline-secondary"
-                    size="sm"
-                    onClick={() => {
-                      setSearchTerm('');
-                      setFilterDepartment('all');
-                      setSortBy('name');
-                    }}
-                    className="w-100"
-                  >
-                    <FaSyncAlt className="me-1" size={12} />
-                    Reset
-                  </Button>
-                </Col>
-              </Row>
-
               <div className="table-responsive" style={{ maxHeight: '400px', overflowY: 'auto' }}>
                 <Table striped hover size="sm" className="mb-0">
                   <thead className="bg-light sticky-top" style={{ top: 0, zIndex: 10 }}>
                     <tr className="small">
-                      <th className="fw-normal text-center" style={{ width: '5%' }}>#</th>
-                      <th className="fw-normal" style={{ width: '20%' }}>Employee</th>
-                      <th className="fw-normal d-none d-md-table-cell" style={{ width: '15%' }}>Department</th>
-                      <th className="fw-normal" style={{ width: '12%' }}>Total Accrued</th>
-                      <th className="fw-normal" style={{ width: '10%' }}>Used</th>
-                      <th className="fw-normal" style={{ width: '12%' }}>Available</th>
-                      <th className="fw-normal" style={{ width: '12%' }}>Status</th>
-                      <th className="fw-normal d-none d-lg-table-cell" style={{ width: '14%' }}>Probation</th>
+                      <th className="fw-normal text-center">#</th>
+                      <th className="fw-normal">Employee</th>
+                      <th className="fw-normal d-none d-md-table-cell">Department</th>
+                      <th className="fw-normal">Total Accrued</th>
+                      <th className="fw-normal">Used</th>
+                      <th className="fw-normal">Available</th>
+                      <th className="fw-normal">Status</th>
+                      <th className="fw-normal d-none d-lg-table-cell">Probation</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2071,23 +2058,26 @@ const AdminDashboard = () => {
                         // Get values from leaveBalance
                         const totalAccrued = parseFloat(emp.leaveBalance?.total_accrued) || 0;
                         const used = parseFloat(emp.leaveBalance?.used) || 0;
-
-                        // CRITICAL FIX: Calculate available = total_accrued - used
-                        const available = Math.max(0, totalAccrued - used);
-
-                        const isProbation = !emp.leaveBalance?.is_probation_complete && emp.leaveBalance?.months_completed < 6;
+                        const available = parseFloat(emp.leaveBalance?.available) || 0;
                         const monthsCompleted = emp.leaveBalance?.months_completed || 0;
+                        const isProbationComplete = emp.leaveBalance?.is_probation_complete || false;
+
+                        // Show appropriate value based on probation status
+                        // For display, show Total Accrued, but Available is what they can actually use
+                        const displayAvailable = isProbationComplete ? available : totalAccrued;
 
                         let statusColor = 'success';
                         let statusText = 'Good';
 
-                        if (available <= 0) {
+                        if (displayAvailable <= 0) {
                           statusColor = 'danger';
                           statusText = 'No Leaves';
-                        } else if (available < 3) {
+                        } else if (displayAvailable < 3) {
                           statusColor = 'warning';
                           statusText = 'Low';
                         }
+
+                        const isProbation = !isProbationComplete && monthsCompleted < 6;
 
                         return (
                           <tr key={emp.id} className={isProbation ? 'table-light' : ''}>
@@ -2114,13 +2104,13 @@ const AdminDashboard = () => {
                             </td>
                             <td className="small">
                               <Badge bg={statusColor} pill className="px-2 py-1">
-                                {available.toFixed(1)}
+                                {displayAvailable.toFixed(1)}
                               </Badge>
                             </td>
-                            <td>
-                              {available <= 0 ? (
+                            <td className="small">
+                              {displayAvailable <= 0 ? (
                                 <Badge bg="danger" pill>No Leaves</Badge>
-                              ) : available < 3 ? (
+                              ) : displayAvailable < 3 ? (
                                 <Badge bg="warning" pill>Low</Badge>
                               ) : (
                                 <Badge bg="success" pill>Good</Badge>
@@ -2151,30 +2141,34 @@ const AdminDashboard = () => {
                 </Table>
               </div>
 
-              {/* Summary Footer */}
-              {filteredEmployees.length > 0 && (
-                <div className="mt-3 pt-2 border-top">
-                  <div className="d-flex flex-wrap justify-content-between align-items-center gap-2">
+              {/* Legend */}
+              <div className="mt-3 pt-2 border-top">
+                <div className="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                  <small className="text-muted">
+                    Showing {filteredEmployees.length} of {employeeLeaveBalances.length} employees
+                  </small>
+                  <div className="d-flex gap-3">
                     <small className="text-muted">
-                      Showing {filteredEmployees.length} of {employeeLeaveBalances.length} employees
+                      <Badge bg="success" pill className="me-1">&nbsp;</Badge>
+                      Good Balance (&ge;3 days)
                     </small>
-                    <div className="d-flex gap-3">
-                      <small className="text-muted">
-                        <Badge bg="success" pill className="me-1">&nbsp;</Badge>
-                        Good Balance (&ge;3 days)
-                      </small>
-                      <small className="text-muted">
-                        <Badge bg="warning" pill className="me-1">&nbsp;</Badge>
-                        Low Balance (&lt;3 days)
-                      </small>
-                      <small className="text-muted">
-                        <Badge bg="danger" pill className="me-1">&nbsp;</Badge>
-                        No Balance (0 days)
-                      </small>
-                    </div>
+                    <small className="text-muted">
+                      <Badge bg="warning" pill className="me-1">&nbsp;</Badge>
+                      Low Balance (&lt;3 days)
+                    </small>
+                    <small className="text-muted">
+                      <Badge bg="danger" pill className="me-1">&nbsp;</Badge>
+                      No Balance (0 days)
+                    </small>
                   </div>
                 </div>
-              )}
+                <div className="mt-2 text-center">
+                  <small className="text-muted">
+                    <FaInfoCircle className="me-1" size={10} />
+                    Employees on probation see their Total Accrued leaves (usable after probation completion)
+                  </small>
+                </div>
+              </div>
             </Card.Body>
           </Card>
         </>
