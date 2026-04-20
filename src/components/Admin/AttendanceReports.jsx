@@ -19,7 +19,9 @@ import {
   FaUniversity,
   FaIdCard,
   FaMoon,
-  FaTrophy
+  FaTrophy,
+  FaCheckCircle,
+  FaInfoCircle
 } from 'react-icons/fa';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
@@ -87,14 +89,14 @@ const AttendanceReports = () => {
   };
 
 
-  // Format late minutes to "Xh Ym Zs" format
   const formatLateDisplay = (lateMinutes) => {
     if (!lateMinutes || lateMinutes <= 0) return null;
 
     const totalSeconds = Math.round(lateMinutes * 60);
     const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
+    const remainingSeconds = totalSeconds % 3600;
+    const minutes = Math.floor(remainingSeconds / 60);
+    const seconds = remainingSeconds % 60;
 
     const parts = [];
     if (hours > 0) parts.push(`${hours}h`);
@@ -185,9 +187,20 @@ const AttendanceReports = () => {
         record.late_minutes = Number(record.late_minutes) || 0;
         record.is_late = record.late_minutes > 0;
 
-        // FIX: Always calculate late_display if late_minutes exists
+        // FIXED: Always calculate late_display if late_minutes exists
         if (record.late_minutes > 0) {
-          record.late_display = formatLateDisplay(record.late_minutes);
+          // Calculate late display with proper formatting
+          const totalSeconds = Math.floor(record.late_minutes * 60);
+          const hours = Math.floor(totalSeconds / 3600);
+          const remainingSeconds = totalSeconds % 3600;
+          const minutes = Math.floor(remainingSeconds / 60);
+          const seconds = remainingSeconds % 60;
+
+          const parts = [];
+          if (hours > 0) parts.push(`${hours}h`);
+          if (minutes > 0) parts.push(`${minutes}m`);
+          if (seconds > 0 || (hours === 0 && minutes === 0)) parts.push(`${seconds}s`);
+          record.late_display = parts.join(' ');
         } else {
           record.late_display = null;
         }
@@ -810,6 +823,8 @@ const AttendanceReports = () => {
   };
 
   const getStatusBadge = (record) => {
+    const lateDisplay = record.late_display || (record.late_minutes > 0 ? formatLateDisplay(record.late_minutes) : null);
+
     if (record.overtime_hours > 0) {
       return (
         <Badge bg="success" className="px-2 py-1 text-nowrap" style={{ backgroundColor: '#28a745' }}>
@@ -829,14 +844,14 @@ const AttendanceReports = () => {
     if (record.status === 'working') {
       return record.is_late ?
         <Badge bg="warning" className="px-2 py-1 text-nowrap" style={{ backgroundColor: '#fd7e14' }}>
-          Working ({formatLateDisplay(record.late_minutes)} late)
+          Working (Late {lateDisplay})
         </Badge> :
         <Badge bg="info" className="px-2 py-1 text-nowrap">Working</Badge>;
     }
     if (record.status === 'present') {
       return record.is_late ?
         <Badge bg="warning" className="px-2 py-1 text-nowrap" style={{ backgroundColor: '#fd7e14' }}>
-          Present ({formatLateDisplay(record.late_minutes)} late)
+          Present (Late {lateDisplay})
         </Badge> :
         <Badge bg="success" className="px-2 py-1 text-nowrap">Present</Badge>;
     }
@@ -1002,96 +1017,119 @@ const AttendanceReports = () => {
               <div className="table-responsive" style={{ maxHeight: '400px', overflow: 'auto' }}>
                 <Table size="sm" striped className="mb-0">
                   <thead className="bg-light sticky-top" style={{ top: 0, zIndex: 10 }}>
-                    <tr>
+                    <tr className="small">
                       <th className="text-dark fw-normal small text-center" style={{ width: '50px' }}>Sr No</th>
                       <th className="text-dark fw-normal small">Employee</th>
                       <th className="text-dark fw-normal small d-none d-sm-table-cell">Dept</th>
                       <th className="text-dark fw-normal small d-none d-md-table-cell">Shift</th>
                       <th className="text-dark fw-normal small">In</th>
-                      <th className="text-dark fw-normal small d-none d-lg-table-cell">Late</th>
+                      <th className="text-dark fw-normal small">Late</th>
                       <th className="text-dark fw-normal small d-none d-lg-table-cell">Out</th>
                       <th className="text-dark fw-normal small d-none d-xl-table-cell">Hours</th>
                       <th className="text-dark fw-normal small d-none d-xl-table-cell">OT</th>
-                      <th className="text-dark fw-normal small d-none d-xl-table-cell">OT Amt</th>
                       <th className="text-dark fw-normal small d-none d-xl-table-cell">Comp-Off</th>
                       <th className="text-dark fw-normal small">Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {dailyAttendance.length > 0 ? (
-                      dailyAttendance.map((record, index) => (
-                        <tr key={index} className={record.late_minutes > 0 ? 'table-warning' : ''}>
-                          <td className="text-center small">{index + 1}</td>
-                          <td className="small">
-                            <div className="text-truncate" style={{ maxWidth: '100px' }} title={`${record.first_name} ${record.last_name}`}>
-                              {record.first_name} {record.last_name}
-                            </div>
-                            <small className="text-muted text-truncate d-block" style={{ maxWidth: '100px' }} title={record.employee_id}>
-                              {record.employee_id}
-                            </small>
-                          </td>
-                          <td className="small d-none d-sm-table-cell">
-                            <span className="text-truncate d-inline-block" style={{ maxWidth: '80px' }} title={record.department}>
-                              {record.department}
-                            </span>
-                          </td>
-                          <td className="small d-none d-md-table-cell">
-                            <span className="text-nowrap">{record.shift_time_used || '-'}</span>
-                          </td>
-                          <td className={`small ${record.clock_in ? 'text-success' : 'text-muted'}`}>
-                            <span className="text-nowrap" title={formatShortTime(record.clock_in)}>
-                              {formatShortTime(record.clock_in)}
-                            </span>
-                            {record.late_minutes > 0 && (
-                              <sup className="text-warning ms-1">⚠️</sup>
-                            )}
-                          </td>
-                          <td className="small d-none d-lg-table-cell">
-                            {record.late_minutes > 0 ? (
-                              <Badge bg="warning" pill className="text-nowrap" style={{ backgroundColor: '#fd7e14' }}>
-                                {formatLateDisplay(record.late_minutes)}
-                              </Badge>
-                            ) : '-'}
-                          </td>
-                          <td className={`small d-none d-lg-table-cell ${record.clock_out ? 'text-danger' : 'text-muted'}`}>
-                            <span className="text-nowrap" title={formatShortTime(record.clock_out)}>
-                              {formatShortTime(record.clock_out)}
-                            </span>
-                          </td>
-                          <td className="small d-none d-xl-table-cell">
-                            {record.total_hours ? (
-                              <span className="text-nowrap">
-                                {formatHours(parseFloat(record.total_hours))}
+                      dailyAttendance.map((record, index) => {
+                        // Calculate late display
+                        const lateDisplay = record.late_display || (record.late_minutes > 0 ? formatLateDisplay(record.late_minutes) : null);
+
+                        return (
+                          <tr key={index} className={record.late_minutes > 0 ? 'table-warning' : ''}>
+                            <td className="text-center small">{index + 1}</td>
+                            <td className="small">
+                              <div className="text-truncate" style={{ maxWidth: '100px' }} title={`${record.first_name} ${record.last_name}`}>
+                                {record.first_name} {record.last_name}
+                              </div>
+                              <small className="text-muted text-truncate d-block" style={{ maxWidth: '100px' }} title={record.employee_id}>
+                                {record.employee_id}
+                              </small>
+                            </td>
+                            <td className="small d-none d-sm-table-cell">
+                              <span className="text-truncate d-inline-block" style={{ maxWidth: '80px' }} title={record.department}>
+                                {record.department}
                               </span>
-                            ) : '-'}
-                          </td>
-                          <td className="small d-none d-xl-table-cell">
-                            {record.overtime_hours > 0 ? (
-                              <Badge bg="success" pill className="text-nowrap">
-                                +{record.overtime_hours}h
-                              </Badge>
-                            ) : '-'}
-                          </td>
-                          <td className="small d-none d-xl-table-cell">
-                            {record.overtime_amount > 0 ? (
-                              <Badge bg="info" pill className="text-nowrap">
-                                ₹{record.overtime_amount}
-                              </Badge>
-                            ) : '-'}
-                          </td>
-                          <td className="small d-none d-xl-table-cell">
-                            {record.comp_off_awarded ? (
-                              <Badge bg="purple" pill className="text-nowrap" style={{ backgroundColor: '#9b59b6' }}>
-                                <FaTrophy className="me-1" size={8} /> +{record.comp_off_days}
-                              </Badge>
-                            ) : '-'}
-                          </td>
-                          <td className="small">{getStatusBadge(record)}</td>
-                        </tr>
-                      ))
+                            </td>
+                            <td className="small d-none d-md-table-cell">
+                              <span className="text-nowrap">{record.shift_time_used || '-'}</span>
+                            </td>
+                            <td className={`small ${record.clock_in ? 'text-success' : 'text-muted'}`}>
+                              <span className="text-nowrap" title={formatShortTime(record.clock_in)}>
+                                {formatShortTime(record.clock_in) || '--:--'}
+                              </span>
+                            </td>
+                            <td className="small">
+                              {lateDisplay ? (
+                                <Badge bg="warning" className="px-2 py-1 text-nowrap" style={{ backgroundColor: '#fd7e14' }}>
+                                  <FaExclamationTriangle className="me-1" size={10} />
+                                  {lateDisplay}
+                                </Badge>
+                              ) : (
+                                <span className="text-muted">-</span>
+                              )}
+                            </td>
+                            <td className={`small d-none d-lg-table-cell ${record.clock_out ? 'text-danger' : 'text-muted'}`}>
+                              <span className="text-nowrap" title={formatShortTime(record.clock_out)}>
+                                {formatShortTime(record.clock_out) || '--:--'}
+                              </span>
+                            </td>
+                            <td className="small d-none d-xl-table-cell">
+                              {record.total_hours ? (
+                                <span className="text-nowrap">
+                                  {formatHours(parseFloat(record.total_hours))}
+                                </span>
+                              ) : '-'}
+                            </td>
+                            <td className="small d-none d-xl-table-cell">
+                              {record.overtime_hours > 0 ? (
+                                <Badge bg="success" pill className="text-nowrap">
+                                  +{record.overtime_hours}h
+                                </Badge>
+                              ) : '-'}
+                            </td>
+                            <td className="small d-none d-xl-table-cell">
+                              {record.comp_off_awarded ? (
+                                <Badge bg="purple" pill className="text-nowrap" style={{ backgroundColor: '#9b59b6' }}>
+                                  <FaTrophy className="me-1" size={8} /> +{record.comp_off_days}
+                                </Badge>
+                              ) : '-'}
+                            </td>
+                            <td className="small">
+                              {record.status === 'present' ? (
+                                <Badge bg="success" className="px-2 py-1 text-nowrap">
+                                  <FaCheckCircle className="me-1" size={10} />
+                                  Present
+                                </Badge>
+                              ) : record.status === 'working' ? (
+                                <Badge bg="info" className="px-2 py-1 text-nowrap">Working</Badge>
+                              ) : record.status === 'half_day' ? (
+                                <Badge bg="warning" className="px-2 py-1 text-nowrap">Half Day</Badge>
+                              ) : record.status === 'on_leave' ? (
+                                <Badge bg="purple" className="px-2 py-1 text-nowrap" style={{ backgroundColor: '#6f42c1' }}>On Leave</Badge>
+                              ) : record.status === 'holiday' ? (
+                                <Badge bg="warning" className="px-2 py-1 text-nowrap" style={{ backgroundColor: '#ffc107' }}>Holiday</Badge>
+                              ) : record.status === 'weekend' ? (
+                                <Badge bg="secondary" className="px-2 py-1 text-nowrap">
+                                  <FaMoon className="me-1" size={10} /> W-OFF
+                                </Badge>
+                              ) : record.status === 'late' ? (
+                                <Badge bg="warning" className="px-2 py-1 text-nowrap" style={{ backgroundColor: '#fd7e14' }}>
+                                  <FaExclamationTriangle className="me-1" size={10} />
+                                  Late {lateDisplay}
+                                </Badge>
+                              ) : (
+                                <Badge bg="secondary" className="px-2 py-1 text-nowrap">Absent</Badge>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
                     ) : (
                       <tr>
-                        <td colSpan="12" className="text-center py-4">No attendance records</td>
+                        <td colSpan="11" className="text-center py-4">No attendance records</td>
                       </tr>
                     )}
                   </tbody>

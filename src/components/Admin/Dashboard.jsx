@@ -64,6 +64,7 @@ import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 import { useNavigate } from 'react-router-dom';
 import { useNotification } from '../../context/NotificationContext';
+import HistoricalLateMarksUpdater from './HistoricalLateMarksUpdater';
 
 ChartJS.register(
   CategoryScale,
@@ -123,6 +124,26 @@ const RegularizationRequests = ({ onRequestCountChange }) => {
     const interval = setInterval(fetchRequests, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  // src/components/Admin/AdminDashboard.jsx
+  // Add or update this function at the top:
+
+  const formatLateTime = (lateMinutes) => {
+    if (!lateMinutes || lateMinutes <= 0) return null;
+
+    const totalSeconds = Math.round(lateMinutes * 60);
+    const hours = Math.floor(totalSeconds / 3600);
+    const remainingSeconds = totalSeconds % 3600;
+    const minutes = Math.floor(remainingSeconds / 60);
+    const seconds = remainingSeconds % 60;
+
+    const parts = [];
+    if (hours > 0) parts.push(`${hours}h`);
+    if (minutes > 0) parts.push(`${minutes}m`);
+    if (seconds > 0 || (hours === 0 && minutes === 0)) parts.push(`${seconds}s`);
+
+    return parts.join(' ');
+  };
 
   const handleApprove = async () => {
     console.log('Selected Request:', selectedRequest);
@@ -1404,6 +1425,7 @@ const AdminDashboard = () => {
             <FaDownload className="me-1" size={12} />
             Export
           </Button>
+          <HistoricalLateMarksUpdater />
         </div>
       </div>
 
@@ -1951,24 +1973,88 @@ const AdminDashboard = () => {
                   </thead>
                   <tbody>
                     {filteredAttendance.length > 0 ? (
-                      filteredAttendance.map((att, index) => (
-                        <tr key={att.id || index}>
-                          <td className="text-center">{index + 1}</td>
-                          <td className="small">
-                            <div className="text-truncate" style={{ maxWidth: '120px' }}>{att.first_name} {att.last_name}</div>
-                            <small className="text-muted">{att.employee_id}</small>
-                          </td>
-                          <td className="small d-none d-md-table-cell text-truncate" style={{ maxWidth: '100px' }}>{att.department}</td>
-                          <td className={`small ${att.clock_in ? 'text-success' : 'text-muted'}`}>
-                            {formatTime(att.clock_in)}
-                            {att.late_minutes > 0 && <Badge bg="danger" className="ms-1" pill>Late</Badge>}
-                          </td>
-                          <td className={`small d-none d-sm-table-cell ${att.clock_out ? 'text-danger' : 'text-muted'}`}>{formatTime(att.clock_out)}</td>
-                          <td>{getStatusBadge(att)}</td>
-                        </tr>
-                      ))
+                      filteredAttendance.map((att, index) => {
+                        // Calculate late display consistently
+                        const lateMinutes = parseFloat(att.late_minutes) || 0;
+                        let lateDisplay = null;
+                        if (lateMinutes > 0) {
+                          const totalSeconds = Math.floor(lateMinutes * 60);
+                          const hours = Math.floor(totalSeconds / 3600);
+                          const remainingSeconds = totalSeconds % 3600;
+                          const minutes = Math.floor(remainingSeconds / 60);
+                          const seconds = remainingSeconds % 60;
+                          const parts = [];
+                          if (hours > 0) parts.push(`${hours}h`);
+                          if (minutes > 0) parts.push(`${minutes}m`);
+                          if (seconds > 0 || (hours === 0 && minutes === 0)) parts.push(`${seconds}s`);
+                          lateDisplay = parts.join(' ');
+                        }
+
+                        return (
+                          <tr key={att.id || index}>
+                            <td className="text-center">{index + 1}</td>
+                            <td className="small">
+                              <div className="text-truncate" style={{ maxWidth: '120px' }}>{att.first_name} {att.last_name}</div>
+                              <small className="text-muted">{att.employee_id}</small>
+                            </td>
+                            <td className="small d-none d-md-table-cell text-truncate" style={{ maxWidth: '100px' }}>{att.department}</td>
+                            <td className={`small ${att.clock_in ? 'text-success' : 'text-muted'}`}>
+                              <div>
+                                <span className="text-nowrap">{formatTime(att.clock_in)}</span>
+                                {lateDisplay && (
+                                  <div className="mt-1">
+                                    <Badge bg="warning" pill style={{ backgroundColor: '#fd7e14', fontSize: '10px' }}>
+                                      <FaExclamationTriangle className="me-1" size={8} />
+                                      Late {lateDisplay}
+                                    </Badge>
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                            <td className={`small d-none d-sm-table-cell ${att.clock_out ? 'text-danger' : 'text-muted'}`}>
+                              {formatTime(att.clock_out) || '--:--'}
+                            </td>
+                            <td>
+                              {att.clock_in && !att.clock_out ? (
+                                lateDisplay ? (
+                                  <Badge bg="warning" className="px-2 py-1">
+                                    <FaExclamationTriangle className="me-1" size={10} />
+                                    Working (Late {lateDisplay})
+                                  </Badge>
+                                ) : (
+                                  <Badge bg="info" className="px-2 py-1">
+                                    <FaClock className="me-1" size={10} />
+                                    Working
+                                  </Badge>
+                                )
+                              ) : att.clock_in && att.clock_out ? (
+                                lateDisplay ? (
+                                  <Badge bg="warning" className="px-2 py-1">
+                                    <FaExclamationTriangle className="me-1" size={10} />
+                                    Present (Late {lateDisplay})
+                                  </Badge>
+                                ) : (
+                                  <Badge bg="success" className="px-2 py-1">
+                                    <FaCheckCircle className="me-1" size={10} />
+                                    Present
+                                  </Badge>
+                                )
+                              ) : (
+                                <Badge bg="secondary" className="px-2 py-1">
+                                  Not Clocked
+                                </Badge>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
                     ) : (
-                      <tr><td colSpan="6" className="text-center py-4"><FaClock size={30} className="text-muted mb-2 opacity-50" /><p className="text-muted mb-0">No attendance records for today</p></td></tr>
+                      <tr>
+                        <td colSpan="6" className="text-center py-4">
+                          <FaClock size={30} className="text-muted mb-2 opacity-50" />
+                          <p className="text-muted mb-0">No attendance records for today</p>
+                        </td>
+                      </tr>
                     )}
                   </tbody>
                 </Table>

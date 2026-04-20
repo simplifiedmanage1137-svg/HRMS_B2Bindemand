@@ -67,6 +67,7 @@ export const API_ENDPOINTS = {
     ATTENDANCE_APPROVE_REGULARIZATION: (request_id) => `${API_BASE_URL}/api/attendance/regularization/${request_id}/approve`,
     ATTENDANCE_REJECT_REGULARIZATION: (request_id) => `${API_BASE_URL}/api/attendance/regularization/${request_id}/reject`,
     ATTENDANCE_AUTO_CLOSE_STALE: `${API_BASE_URL}/api/attendance/auto-close-stale`,
+    ATTENDANCE_UPDATE_HISTORICAL_LATE_MARKS: `${API_BASE_URL}/api/attendance/update-historical-late-marks`,
     
     // Overtime endpoints
     OVERTIME_SUMMARY: (employeeId, month, year) => 

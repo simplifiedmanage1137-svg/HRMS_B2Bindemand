@@ -996,22 +996,7 @@ const EmployeeDashboard = () => {
           </Card>
         </Col>
 
-        <Col xs={12} sm={6} md={3}>
-          <Card className="border-0 shadow-sm h-100">
-            <Card.Body className="p-2 p-md-3">
-              <div className="d-flex justify-content-between align-items-start">
-                <div className="overflow-hidden">
-                  <p className="text-muted small mb-1 text-truncate">Absent Days</p>
-                  <h4 className="mb-0 fw-bold text-danger">{stats.absentDays || 0}</h4>
-                  <small className="text-muted text-truncate d-block">This month</small>
-                </div>
-                <div className="bg-danger bg-opacity-10 p-2 rounded-circle flex-shrink-0">
-                  <FaTimesCircle className="text-danger" size={20} />
-                </div>
-              </div>
-            </Card.Body>
-          </Card>
-        </Col>
+       
 
         <Col xs={12} sm={6} md={3}>
           <Card className="border-0 shadow-sm h-100">

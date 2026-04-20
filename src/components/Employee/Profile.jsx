@@ -763,8 +763,6 @@ const Profile = () => {
                         </Row>
                     )}
 
-                    {/* Bank Tab */}
-                  // In Profile.jsx - Add Aadhar Card display in Bank Tab
 
                     {/* Bank Tab */}
                     {activeTab === 'bank' && (

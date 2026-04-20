@@ -188,17 +188,29 @@ const Attendance = () => {
     return `${year}-${month}-${day}`;
   };
 
+  // src/components/Employee/Attendance.jsx
+  // Replace the existing formatLateTime function with this:
+
   const formatLateTime = (lateMinutes) => {
     if (!lateMinutes || lateMinutes <= 0) return null;
+
+    // Parse if it's a string
     let minutes = typeof lateMinutes === 'string' ? parseFloat(lateMinutes) : lateMinutes;
     if (isNaN(minutes) || minutes <= 0) return null;
-    const hours = Math.floor(minutes / 60);
-    const remainingMinutes = Math.floor(minutes % 60);
-    const seconds = Math.round((minutes - Math.floor(minutes)) * 60);
-    let result = `${hours}h`;
-    if (remainingMinutes > 0 || seconds > 0) result += ` ${remainingMinutes}m`;
-    if (seconds > 0) result += ` ${seconds}s`;
-    return `Late ${result}`;
+
+    // Calculate hours, minutes, seconds
+    const totalSeconds = Math.floor(minutes * 60);
+    const hours = Math.floor(totalSeconds / 3600);
+    const remainingSeconds = totalSeconds % 3600;
+    const mins = Math.floor(remainingSeconds / 60);
+    const secs = remainingSeconds % 60;
+
+    const parts = [];
+    if (hours > 0) parts.push(`${hours}h`);
+    if (mins > 0) parts.push(`${mins}m`);
+    if (secs > 0 || (hours === 0 && mins === 0)) parts.push(`${secs}s`);
+
+    return parts.join(' ');
   };
 
   const calculateDistance = (lat1, lon1, lat2, lon2) => {
@@ -218,6 +230,10 @@ const Attendance = () => {
     const today = new Date().toISOString().split('T')[0];
     const isToday = record.attendance_date === today;
 
+    // Get formatted late time
+    const lateFormatted = record.late_display || (record.late_minutes > 0 ? formatLateTime(record.late_minutes) : null);
+    const lateText = lateFormatted ? ` (Late ${lateFormatted})` : '';
+
     if (record.isWeeklyOff) {
       return <Badge bg="secondary" className="px-2 py-1"><FaMoon className="me-1" size={10} /> W-OFF</Badge>;
     }
@@ -229,30 +245,30 @@ const Attendance = () => {
     // ✅ If they have BOTH clock_in AND clock_out, they completed their shift
     if (record.clock_in && record.clock_out) {
       if (record.status === 'half_day') {
-        return <Badge bg="warning" className="text-dark px-2 py-1"><FaCloudSun className="me-1" size={10} /> Half Day</Badge>;
+        return <Badge bg="warning" className="text-dark px-2 py-1"><FaCloudSun className="me-1" size={10} /> Half Day{lateText}</Badge>;
       }
       if (record.late_minutes > 0) {
-        return <Badge bg="warning" className="px-2 py-1 text-dark"><FaExclamationTriangle className="me-1" size={10} /> Late ({formatLateTime(record.late_minutes)})</Badge>;
+        return <Badge bg="warning" className="px-2 py-1 text-dark"><FaExclamationTriangle className="me-1" size={10} /> Late{lateText}</Badge>;
       }
       return <Badge bg="success" className="px-2 py-1"><FaCheckCircle className="me-1" size={10} /> Present</Badge>;
     }
 
     if (isToday && record.clock_in && !record.clock_out) {
       if (record.late_minutes > 0) {
-        return <Badge bg="warning" className="px-2 py-1 text-dark"><FaExclamationTriangle className="me-1" size={10} /> Late ({formatLateTime(record.late_minutes)})</Badge>;
+        return <Badge bg="warning" className="px-2 py-1 text-dark"><FaExclamationTriangle className="me-1" size={10} /> Late{lateText}</Badge>;
       }
       return <Badge bg="info" className="px-2 py-1"><FaClock className="me-1" size={10} /> Working</Badge>;
     }
 
     if (record.status === 'present') {
       if (record.late_minutes > 0) {
-        return <Badge bg="warning" className="px-2 py-1 text-dark"><FaExclamationTriangle className="me-1" size={10} /> Late ({formatLateTime(record.late_minutes)})</Badge>;
+        return <Badge bg="warning" className="px-2 py-1 text-dark"><FaExclamationTriangle className="me-1" size={10} /> Late{lateText}</Badge>;
       }
       return <Badge bg="success" className="px-2 py-1"><FaCheckCircle className="me-1" size={10} /> Present</Badge>;
     }
 
     if (record.status === 'half_day') {
-      return <Badge bg="warning" className="text-dark px-2 py-1"><FaCloudSun className="me-1" size={10} /> Half Day</Badge>;
+      return <Badge bg="warning" className="text-dark px-2 py-1"><FaCloudSun className="me-1" size={10} /> Half Day{lateText}</Badge>;
     }
 
     if (record.status === 'absent') {
@@ -1069,7 +1085,7 @@ const Attendance = () => {
       try {
         const response = await axios.get(API_ENDPOINTS.ATTENDANCE_TODAY(user.employeeId));
         const todayAttendance = response.data.attendance;
-        
+
         // If today has clock_out, ensure no active session
         if (todayAttendance && todayAttendance.clock_out) {
           setHasClockedOutToday(true);
@@ -1097,7 +1113,7 @@ const Attendance = () => {
       }
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
-    
+
     return () => {
       clearInterval(timer);
       if (heartbeatInterval) clearInterval(heartbeatInterval);
@@ -1129,9 +1145,9 @@ const Attendance = () => {
       clearSessionFromStorage();
       setHasClockedOutToday(false);
     };
-    
+
     window.addEventListener('regularizationApproved', handleRegularizationEvent);
-    
+
     return () => {
       window.removeEventListener('regularizationApproved', handleRegularizationEvent);
     };
