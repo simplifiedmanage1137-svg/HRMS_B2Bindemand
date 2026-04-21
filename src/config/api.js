@@ -1,15 +1,9 @@
 // src/config/api.js
 
-// ============== LOCAL DEVELOPMENT (COMMENTED OLD) ==============
-// For local development (uncomment for development)
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-
-// ============== PRODUCTION (COMMENTED FOR NOW) ==============
-// const API_BASE_URL = 'https://employee-management-system-brvo.onrender.com';
-
-// Add this debug log
-console.log('🔧 API Base URL:', API_BASE_URL);
-console.log('🔧 Environment:', import.meta.env.MODE);
+// In production (Vercel/Render): use the deployed backend URL from env
+// In local development: use empty string so Vite proxy handles /api/* → localhost:5000
+// This way the app works on ANY machine without changing any config
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
 export const API_ENDPOINTS = {
     // Auth endpoints
@@ -212,14 +206,5 @@ export const API_ENDPOINTS = {
     SYSTEM_CLEAR_CACHE: `${API_BASE_URL}/api/system/clear-cache`
 };
 
-// Log all endpoints for debugging
-console.log('🔧 API Endpoints loaded:', {
-    LOGIN: API_ENDPOINTS.LOGIN,
-    TODAY_EVENTS: API_ENDPOINTS.TODAY_EVENTS,
-    ATTENDANCE_MISSED_CLOCKOUTS: API_ENDPOINTS.ATTENDANCE_MISSED_CLOCKOUTS,
-    ATTENDANCE_REGULARIZATION_REQUEST: API_ENDPOINTS.ATTENDANCE_REGULARIZATION_REQUEST,
-    ATTENDANCE_PENDING_REGULARIZATIONS: API_ENDPOINTS.ATTENDANCE_PENDING_REGULARIZATIONS,
-    BASE_URL: API_BASE_URL
-});
 
 export default API_ENDPOINTS;
