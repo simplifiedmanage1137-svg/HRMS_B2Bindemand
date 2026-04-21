@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://hrms-b2bindemand-backend.onrender.com/api/:path*"
+    }
+  ]
+}
