@@ -393,158 +393,74 @@ const EmployeeDashboard = () => {
     }
   };
 
-  // Replace the fetchAttendanceHistory function in Dashboard.jsx with this:
-
   const fetchAttendanceHistory = async () => {
     try {
       const today = new Date();
+      today.setHours(0, 0, 0, 0);
 
-      // Calculate cycle dates (26th of current month to 25th of next month)
+      // Salary cycle: prev month 26th → current month 25th
       let cycleStartDate, cycleEndDate;
-
       if (today.getDate() >= 26) {
-        // If today is 26th or later, cycle is from 26th current month to 25th next month
         cycleStartDate = new Date(today.getFullYear(), today.getMonth(), 26);
         cycleEndDate = new Date(today.getFullYear(), today.getMonth() + 1, 25);
       } else {
-        // If today is before 26th, cycle is from 26th previous month to 25th current month
         cycleStartDate = new Date(today.getFullYear(), today.getMonth() - 1, 26);
         cycleEndDate = new Date(today.getFullYear(), today.getMonth(), 25);
       }
 
       const startDateStr = cycleStartDate.toISOString().split('T')[0];
-      const endDateStr = cycleEndDate.toISOString().split('T')[0];
+      // Fetch only up to today (not future dates)
+      const fetchEndDate = today < cycleEndDate ? today : cycleEndDate;
+      const endDateStr = fetchEndDate.toISOString().split('T')[0];
 
-      console.log('📅 Fetching attendance for cycle:', {
-        start: startDateStr,
-        end: endDateStr,
-        cycle: `${startDateStr} to ${endDateStr}`
-      });
-
-      // ✅ Use employee-specific endpoint
-      const url = `${API_ENDPOINTS.ATTENDANCE_EMPLOYEE_REPORT(user.employeeId, startDateStr, endDateStr)}`;
-      console.log('📡 API URL:', url);
-
-      const response = await axios.get(url);
-      console.log('📊 API Response:', response.data);
+      const response = await axios.get(
+        API_ENDPOINTS.ATTENDANCE_EMPLOYEE_REPORT(user.employeeId, startDateStr, endDateStr)
+      );
 
       const attendance = response.data.attendance || [];
-      console.log('📊 Attendance records for cycle:', attendance.length);
+      setAttendanceHistory(attendance);
 
-      // Get all dates in the cycle
-      const cycleDays = [];
-      let currentDate = new Date(cycleStartDate);
-
-      while (currentDate <= cycleEndDate) {
-        cycleDays.push(new Date(currentDate));
-        currentDate.setDate(currentDate.getDate() + 1);
-      }
-
-      // Initialize counters
-      let presentDays = 0;
-      let halfDays = 0;
-      let weeklyOff = 0;
-      let absent = 0;
-      let totalWorkingHours = 0;
+      // Count stats only for days from cycle start up to TODAY (not future)
+      let presentDays = 0, halfDays = 0, weeklyOff = 0, absent = 0;
       let totalWorkingDaysCount = 0;
 
-      // For each day in the cycle, determine attendance status
-      for (const date of cycleDays) {
-        const dateStr = date.toISOString().split('T')[0];
-        const dayOfWeek = date.getDay();
-        const isWeeklyOff = dayOfWeek === 0 || dayOfWeek === 6; // Sunday or Saturday
-
-        // Find attendance record for this date
-        const record = attendance.find(r => r.attendance_date === dateStr);
+      let d = new Date(cycleStartDate);
+      while (d <= today) {
+        const dateStr = d.toISOString().split('T')[0];
+        const dow = d.getDay();
+        const isWeeklyOff = dow === 0 || dow === 6;
 
         if (isWeeklyOff) {
-          // Weekly off - don't count as absent
           weeklyOff++;
-          console.log(`📅 ${dateStr} (${date.toLocaleDateString('en-US', { weekday: 'long' })}): Weekly Off`);
         } else {
-          // Working day - count as present or absent
           totalWorkingDaysCount++;
-
-          if (record) {
-            // Check if present (status 'present', 'working', or has clock_in)
-            if (record.status === 'present' || record.status === 'working' || record.clock_in) {
-              presentDays++;
-              console.log(`✅ ${dateStr}: Present (${record.status || 'working'})`);
-
-              if (record.total_hours) {
-                totalWorkingHours += parseFloat(record.total_hours);
-              }
-            }
-            else if (record.status === 'half_day') {
-              halfDays++;
-              presentDays++; // Half day is also counted as present
-              console.log(`🌓 ${dateStr}: Half Day`);
-
-              if (record.total_hours) {
-                totalWorkingHours += parseFloat(record.total_hours);
-              }
-            }
-            else if (record.status === 'absent') {
-              absent++;
-              console.log(`❌ ${dateStr}: Absent (marked in system)`);
-            }
-            else {
-              // Has record but status is not set properly - check if clock_in exists
-              if (record.clock_in) {
-                presentDays++;
-                console.log(`✅ ${dateStr}: Present (has clock_in)`);
-                if (record.total_hours) {
-                  totalWorkingHours += parseFloat(record.total_hours);
-                }
-              } else {
-                absent++;
-                console.log(`❌ ${dateStr}: Absent (no clock_in)`);
-              }
-            }
+          const record = attendance.find(r => r.attendance_date === dateStr);
+          if (record && (record.clock_in || record.status === 'present')) {
+            if (record.status === 'half_day') { halfDays++; presentDays++; }
+            else { presentDays++; }
           } else {
-            // No record means absent
             absent++;
-            console.log(`❌ ${dateStr}: Absent (no record)`);
           }
         }
+        d.setDate(d.getDate() + 1);
       }
 
-      console.log('📊 Cycle Stats Summary:', {
-        cycle: `${startDateStr} to ${endDateStr}`,
-        totalDaysInCycle: cycleDays.length,
-        workingDays: totalWorkingDaysCount,
-        weeklyOffDays: weeklyOff,
-        presentDays: presentDays,
-        halfDays: halfDays,
-        absentDays: absent,
-        totalWorkingHours: Math.round(totalWorkingHours * 10) / 10,
-        // Verification
-        verification: `${presentDays + absent} working days accounted (should equal ${totalWorkingDaysCount})`
-      });
+      // Cycle label for display
+      const cycleLabel = `${cycleStartDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} - ${cycleEndDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`;
 
       setStats(prev => ({
         ...prev,
-        presentDays: presentDays,
+        presentDays,
         absentDays: absent,
-        halfDays: halfDays,
+        halfDays,
         weeklyOffDays: weeklyOff,
-        totalWorkingHours: Math.round(totalWorkingHours * 10) / 10,
-        totalWorkingDays: totalWorkingDaysCount
+        totalWorkingDays: totalWorkingDaysCount,
+        cycleLabel
       }));
 
     } catch (error) {
-      console.error('❌ Error fetching attendance history:', error);
-      console.error('Error details:', error.response?.data);
-
-      setStats(prev => ({
-        ...prev,
-        presentDays: 0,
-        absentDays: 0,
-        halfDays: 0,
-        weeklyOffDays: 0,
-        totalWorkingHours: 0,
-        totalWorkingDays: 0
-      }));
+      console.error('Error fetching attendance history:', error);
+      setAttendanceHistory([]);
     }
   };
 
@@ -604,65 +520,57 @@ const EmployeeDashboard = () => {
   };
 
   const updateAttendanceChart = () => {
-    // Initialize hours for each day
-    const daysOfWeek = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    // Show hours for each day of current week (Mon-Sun)
+    const daysOfWeek = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat (W-OFF)', 'Sun (W-OFF)'];
     const hoursByDay = [0, 0, 0, 0, 0, 0, 0];
-    const workingDaysCount = [0, 0, 0, 0, 0, 0, 0];
-    const backgroundColor = [
-      'rgba(54, 162, 235, 0.6)',   // Monday - Blue
-      'rgba(54, 162, 235, 0.6)',   // Tuesday - Blue
-      'rgba(54, 162, 235, 0.6)',   // Wednesday - Blue
-      'rgba(54, 162, 235, 0.6)',   // Thursday - Blue
-      'rgba(54, 162, 235, 0.6)',   // Friday - Blue
-      'rgba(169, 169, 169, 0.6)',  // Saturday - Gray (W-OFF)
-      'rgba(169, 169, 169, 0.6)'   // Sunday - Gray (W-OFF)
-    ];
+
+    // Get current week's Monday
+    const today = new Date();
+    const dayOfWeek = today.getDay(); // 0=Sun, 1=Mon...
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+    monday.setHours(0, 0, 0, 0);
 
     attendanceHistory.forEach(record => {
-      if (record.clock_in && record.total_hours) {
-        const date = new Date(record.attendance_date);
-        const dayIndex = date.getDay(); // 0 = Sunday, 1 = Monday, etc.
-
-        // Adjust index for our array (Monday = 0)
-        let adjustedIndex = dayIndex === 0 ? 6 : dayIndex - 1;
-
-        hoursByDay[adjustedIndex] += parseFloat(record.total_hours);
-        workingDaysCount[adjustedIndex]++;
+      if (!record.clock_in) return;
+      const recDate = new Date(record.attendance_date);
+      recDate.setHours(0, 0, 0, 0);
+      const diffDays = Math.round((recDate - monday) / (1000 * 60 * 60 * 24));
+      if (diffDays >= 0 && diffDays <= 6) {
+        // diffDays 0=Mon,1=Tue,...,5=Sat,6=Sun
+        const hours = parseFloat(record.total_hours) || 0;
+        hoursByDay[diffDays] = Math.round(hours * 10) / 10;
       }
     });
 
-    // Calculate average hours per day
-    const avgHoursByDay = hoursByDay.map((total, index) =>
-      workingDaysCount[index] > 0 ? Math.round((total / workingDaysCount[index]) * 10) / 10 : 0
-    );
-
     setAttendanceChartData({
-      labels: daysOfWeek.map((day, index) => {
-        // Add W-OFF label for Saturday and Sunday
-        if (index === 5) return 'Sat (W-OFF)';
-        if (index === 6) return 'Sun (W-OFF)';
-        return day;
-      }),
-      datasets: [
-        {
-          label: 'Average Working Hours',
-          data: avgHoursByDay,
-          backgroundColor: backgroundColor,
-          borderColor: [
-            'rgb(54, 162, 235)',
-            'rgb(54, 162, 235)',
-            'rgb(54, 162, 235)',
-            'rgb(54, 162, 235)',
-            'rgb(54, 162, 235)',
-            'rgb(128, 128, 128)',
-            'rgb(128, 128, 128)'
-          ],
-          borderWidth: 1,
-          borderRadius: 5,
-          barPercentage: 0.7,
-          categoryPercentage: 0.8
-        }
-      ]
+      labels: daysOfWeek,
+      datasets: [{
+        label: 'Hours Worked',
+        data: hoursByDay,
+        backgroundColor: [
+          'rgba(54, 162, 235, 0.7)',
+          'rgba(54, 162, 235, 0.7)',
+          'rgba(54, 162, 235, 0.7)',
+          'rgba(54, 162, 235, 0.7)',
+          'rgba(54, 162, 235, 0.7)',
+          'rgba(169, 169, 169, 0.5)',
+          'rgba(169, 169, 169, 0.5)'
+        ],
+        borderColor: [
+          'rgb(54, 162, 235)',
+          'rgb(54, 162, 235)',
+          'rgb(54, 162, 235)',
+          'rgb(54, 162, 235)',
+          'rgb(54, 162, 235)',
+          'rgb(128, 128, 128)',
+          'rgb(128, 128, 128)'
+        ],
+        borderWidth: 1,
+        borderRadius: 5,
+        barPercentage: 0.7,
+        categoryPercentage: 0.8
+      }]
     });
   };
 
@@ -959,14 +867,16 @@ const EmployeeDashboard = () => {
             <Card.Body className="p-2 p-md-3">
               <div className="d-flex justify-content-between align-items-start">
                 <div className="overflow-hidden">
-                  <p className="text-muted small mb-1 text-truncate">
-                    {leaveBalance.is_probation_complete ? 'Leave Balance' : 'Accrued Leaves'}
-                  </p>
-                  <h4 className={`mb-0 fw-bold ${leaveBalance.is_probation_complete ? 'text-primary' : 'text-info'}`}>
-                    {leaveBalance.is_probation_complete ? leaveBalance.available : leaveBalance.total_accrued}
+                  <p className="text-muted small mb-1 text-truncate">Leave Balance</p>
+                  <h4 className="mb-0 fw-bold text-primary">
+                    {leaveBalance.is_probation_complete
+                      ? parseFloat(leaveBalance.available).toFixed(1)
+                      : parseFloat(leaveBalance.total_accrued).toFixed(1)}
                   </h4>
                   <small className="text-muted text-truncate d-block">
-                    {leaveBalance.is_probation_complete ? 'Available days' : 'Earned (usable after probation)'}
+                    {leaveBalance.is_probation_complete
+                      ? `Used: ${parseFloat(leaveBalance.used).toFixed(1)} | Pending: ${parseFloat(leaveBalance.pending).toFixed(1)}`
+                      : 'Earned (usable after probation)'}
                   </small>
                 </div>
                 <div className="bg-primary bg-opacity-10 p-2 rounded-circle flex-shrink-0">
@@ -984,14 +894,15 @@ const EmployeeDashboard = () => {
                 <div className="overflow-hidden">
                   <p className="text-muted small mb-1 text-truncate">Present Days</p>
                   <h4 className="mb-0 fw-bold text-success">{stats.presentDays || 0}</h4>
-                  <small className="text-muted text-truncate d-block">This month</small>
+                  <small className="text-muted text-truncate d-block">
+                    Absent: <span className="text-danger fw-semibold">{stats.absentDays || 0}</span>
+                    {stats.cycleLabel && <span className="ms-1">| {stats.cycleLabel}</span>}
+                  </small>
                 </div>
                 <div className="bg-success bg-opacity-10 p-2 rounded-circle flex-shrink-0">
                   <FaCheckCircle className="text-success" size={20} />
                 </div>
               </div>
-              {/* Optional: Show loading indicator while fetching */}
-              {loading && <Spinner size="sm" animation="border" className="mt-2" />}
             </Card.Body>
           </Card>
         </Col>
@@ -1051,7 +962,7 @@ const EmployeeDashboard = () => {
                 <FaChartBar className="me-2 text-primary" />
                 Weekly Attendance Summary
               </h6>
-              <Badge bg="light" text="dark" className="ms-0 ms-sm-auto">Average hours per day</Badge>
+              <Badge bg="light" text="dark" className="ms-0 ms-sm-auto">This week's hours</Badge>
             </Card.Header>
             <Card.Body className="p-2 p-md-3">
               <div style={{ height: '280px', position: 'relative' }}>
@@ -1130,7 +1041,7 @@ const EmployeeDashboard = () => {
 
               <div className="mt-2 text-center text-muted small">
                 <FaInfoCircle className="me-1" size={8} />
-                Avg hours per day (last 30 days)
+                Current week hours per day
               </div>
             </Card.Body>
           </Card>
