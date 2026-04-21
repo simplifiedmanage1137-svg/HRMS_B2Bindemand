@@ -2110,7 +2110,6 @@ const AdminDashboard = () => {
           </Card>
 
           {/* Employee Leave Balances */}
-          {/* Employee Leave Balances */}
           <Card className="mb-4 border-0 shadow-sm">
             <Card.Header className="bg-white d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center py-3 gap-2">
               <h5 className="mb-0 d-flex align-items-center">
@@ -2118,22 +2117,86 @@ const AdminDashboard = () => {
                 <span>Employee Leave Balances</span>
               </h5>
               <div className="d-flex gap-2">
-                <Badge bg="info" className="px-3 py-2">
-                  Total Accrued: {employeeLeaveBalances.reduce((sum, emp) => sum + (parseFloat(emp.leaveBalance?.total_accrued) || 0), 0).toFixed(1)} days
+                <InputGroup size="sm" style={{ width: '250px' }}>
+                  <InputGroup.Text><FaSearch size={12} /></InputGroup.Text>
+                  <Form.Control
+                    type="text"
+                    placeholder="Search by name or ID..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                  {searchTerm && (
+                    <Button
+                      variant="outline-secondary"
+                      onClick={() => setSearchTerm('')}
+                      size="sm"
+                    >
+                      <FaTimesCircle size={12} />
+                    </Button>
+                  )}
+                </InputGroup>
+                <Badge bg="light" text="dark" className="px-3 py-2">
+                  {filteredEmployees.length} / {employeeLeaveBalances.length} Employees
                 </Badge>
               </div>
             </Card.Header>
             <Card.Body>
+              {/* Department Filter Row */}
+              <div className="mb-3">
+                <div className="d-flex flex-wrap gap-2 align-items-center">
+                  <small className="text-muted me-2">Filter by Department:</small>
+                  <ButtonGroup size="sm">
+                    <Button
+                      variant={filterDepartment === 'all' ? 'primary' : 'outline-secondary'}
+                      onClick={() => setFilterDepartment('all')}
+                    >
+                      All
+                    </Button>
+                    {departments.filter(d => d !== 'all').map(dept => (
+                      <Button
+                        key={dept}
+                        variant={filterDepartment === dept ? 'primary' : 'outline-secondary'}
+                        onClick={() => setFilterDepartment(dept)}
+                      >
+                        {dept}
+                      </Button>
+                    ))}
+                  </ButtonGroup>
+                  {(searchTerm || filterDepartment !== 'all') && (
+                    <Button
+                      variant="outline-danger"
+                      size="sm"
+                      onClick={() => {
+                        setSearchTerm('');
+                        setFilterDepartment('all');
+                        setSortBy('name');
+                      }}
+                    >
+                      Clear Filters
+                    </Button>
+                  )}
+                </div>
+              </div>
+
               <div className="table-responsive" style={{ maxHeight: '400px', overflowY: 'auto' }}>
                 <Table striped hover size="sm" className="mb-0">
                   <thead className="bg-light sticky-top" style={{ top: 0, zIndex: 10 }}>
                     <tr className="small">
                       <th className="fw-normal text-center">#</th>
-                      <th className="fw-normal">Employee</th>
-                      <th className="fw-normal d-none d-md-table-cell">Department</th>
+                      <th className="fw-normal" style={{ cursor: 'pointer' }} onClick={() => setSortBy('name')}>
+                        Employee
+                        {sortBy === 'name' && (sortBy === 'name' ? <FaSort className="ms-1" size={10} /> : <FaSort className="ms-1" size={10} />)}
+                      </th>
+                      <th className="fw-normal d-none d-md-table-cell" style={{ cursor: 'pointer' }} onClick={() => setSortBy('department')}>
+                        Department
+                        {sortBy === 'department' && <FaSort className="ms-1" size={10} />}
+                      </th>
                       <th className="fw-normal">Total Accrued</th>
                       <th className="fw-normal">Used</th>
-                      <th className="fw-normal">Available</th>
+                      <th className="fw-normal" style={{ cursor: 'pointer' }} onClick={() => setSortBy('balance')}>
+                        Available
+                        {sortBy === 'balance' && <FaSort className="ms-1" size={10} />}
+                      </th>
                       <th className="fw-normal">Status</th>
                       <th className="fw-normal d-none d-lg-table-cell">Probation</th>
                     </tr>
@@ -2149,7 +2212,6 @@ const AdminDashboard = () => {
                         const isProbationComplete = emp.leaveBalance?.is_probation_complete || false;
 
                         // Show appropriate value based on probation status
-                        // For display, show Total Accrued, but Available is what they can actually use
                         const displayAvailable = isProbationComplete ? available : totalAccrued;
 
                         let statusColor = 'success';
@@ -2219,7 +2281,7 @@ const AdminDashboard = () => {
                     ) : (
                       <tr>
                         <td colSpan="8" className="text-center py-4">
-                          <p className="text-muted mb-0 small">No employees found</p>
+                          <p className="text-muted mb-0 small">No employees found matching your search</p>
                         </td>
                       </tr>
                     )}

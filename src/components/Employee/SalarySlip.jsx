@@ -553,36 +553,20 @@ const SalarySlip = () => {
   };
 
   const getSlipAmounts = (slip) => {
-    if (!slip) {
-      return { basicSalary: 0, deduction: 0, netSalary: 0, overtimeAmount: 0, overtimeHours: 0 };
-    }
+    if (!slip) return { monthlySalary: 0, basicSalary: 0, deduction: 0, netSalary: 0, overtimeAmount: 0, overtimeHours: 0, unpaidLeaveDays: 0, unpaidDeduction: 0, perDaySalary: 0, totalWorkingDays: 0 };
 
-    const slipBase = Number(slip.basic_salary) || 0;
-    const employeeBase = Number(employee?.gross_salary || employee?.salary) || 0;
-    const basicSalary = slipBase > 0 ? slipBase : employeeBase;
-
+    const monthlySalary = Number(slip.monthly_salary) || Number(slip.basic_salary) || Number(employee?.gross_salary || employee?.salary) || 0;
+    const basicSalary = Number(slip.basic_salary) || monthlySalary;
     const deduction = Number(slip.dt) || 200;
     const overtimeAmount = Number(slip.overtime_amount) || 0;
     const overtimeHours = Number(slip.overtime_hours) || 0;
-
+    const unpaidLeaveDays = Number(slip.unpaid_leave_days) || 0;
+    const unpaidDeduction = Number(slip.unpaid_deduction) || 0;
+    const perDaySalary = Number(slip.per_day_salary) || 0;
+    const totalWorkingDays = Number(slip.total_working_days) || 0;
     const netSalary = basicSalary - deduction + overtimeAmount;
 
-    console.log('💰 Slip amounts:', {
-      slip,
-      basicSalary,
-      deduction,
-      overtimeAmount,
-      overtimeHours,
-      netSalary
-    });
-
-    return {
-      basicSalary,
-      deduction,
-      netSalary: netSalary < 0 ? 0 : netSalary,
-      overtimeAmount,
-      overtimeHours
-    };
+    return { monthlySalary, basicSalary, deduction, netSalary: netSalary < 0 ? 0 : netSalary, overtimeAmount, overtimeHours, unpaidLeaveDays, unpaidDeduction, perDaySalary, totalWorkingDays };
   };
 
   const getMonthName = (monthNumber) => {
@@ -1212,28 +1196,39 @@ const SalarySlip = () => {
                   </thead>
                   <tbody>
                     <tr>
-                      <td className="py-1 ps-2">Basic Salary</td>
-                      <td className="text-end py-1 pe-2">
-                        {formatCurrency(selectedSlipAmounts.basicSalary)}
-                      </td>
+                      <td className="py-1 ps-2">Monthly Gross Salary</td>
+                      <td className="text-end py-1 pe-2">{formatCurrency(selectedSlipAmounts.monthlySalary)}</td>
                     </tr>
-                    {/* Overtime row - ALWAYS SHOW, even if 0 */}
+                    {selectedSlipAmounts.unpaidLeaveDays > 0 && (
+                      <tr style={{ backgroundColor: '#fff3cd' }}>
+                        <td className="py-1 ps-2">
+                          <span className="text-danger">
+                            Unpaid Leave Deduction ({selectedSlipAmounts.unpaidLeaveDays} day{selectedSlipAmounts.unpaidLeaveDays > 1 ? 's' : ''} × ₹{formatCurrency(selectedSlipAmounts.perDaySalary)}/day)
+                          </span>
+                          <div className="text-muted" style={{ fontSize: '10px' }}>
+                            Based on {selectedSlipAmounts.totalWorkingDays} working days (Mon–Fri)
+                          </div>
+                        </td>
+                        <td className="text-end py-1 pe-2 text-danger fw-bold">- {formatCurrency(selectedSlipAmounts.unpaidDeduction)}</td>
+                      </tr>
+                    )}
+                    <tr>
+                      <td className="py-1 ps-2 fw-semibold">Basic Salary (After Unpaid Leave)</td>
+                      <td className="text-end py-1 pe-2 fw-semibold">{formatCurrency(selectedSlipAmounts.basicSalary)}</td>
+                    </tr>
                     <tr style={selectedSlipAmounts.overtimeAmount > 0 ? { backgroundColor: '#d4edda' } : {}}>
                       <td className="py-1 ps-2">
                         <span style={selectedSlipAmounts.overtimeAmount > 0 ? { color: '#28a745' } : {}}>
                           Overtime ({selectedSlipAmounts.overtimeHours || 0} hrs @ ₹150/hr)
                         </span>
                       </td>
-                      <td className="text-end py-1 pe-2"
-                        style={selectedSlipAmounts.overtimeAmount > 0 ? { color: '#28a745', fontWeight: 'bold' } : {}}>
+                      <td className="text-end py-1 pe-2" style={selectedSlipAmounts.overtimeAmount > 0 ? { color: '#28a745', fontWeight: 'bold' } : {}}>
                         {selectedSlipAmounts.overtimeAmount > 0 ? '+ ' : ''}{formatCurrency(selectedSlipAmounts.overtimeAmount)}
                       </td>
                     </tr>
                     <tr style={{ backgroundColor: '#f2f2f2' }}>
                       <td className="fw-bold py-1 ps-2">Gross Earnings</td>
-                      <td className="text-end fw-bold py-1 pe-2">
-                        {formatCurrency(selectedSlipAmounts.basicSalary + selectedSlipAmounts.overtimeAmount)}
-                      </td>
+                      <td className="text-end fw-bold py-1 pe-2">{formatCurrency(selectedSlipAmounts.basicSalary + selectedSlipAmounts.overtimeAmount)}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -1274,11 +1269,16 @@ const SalarySlip = () => {
                 </table>
               </div>
 
-              {/* Calculation - Always show Overtime term */}
+              {/* Calculation */}
               <div className="bg-light p-2 mb-3 rounded small">
-                <strong>Calculation:</strong> Basic Salary (₹{formatCurrency(selectedSlipAmounts.basicSalary)})
-                + Overtime (₹{formatCurrency(selectedSlipAmounts.overtimeAmount)})
-                - DT Deduction (₹{formatCurrency(selectedSlipAmounts.deduction)}) = Net Salary (₹{formatCurrency(selectedSlipAmounts.netSalary)})
+                <strong>Calculation:</strong> Monthly Salary (₹{formatCurrency(selectedSlipAmounts.monthlySalary)})
+                {selectedSlipAmounts.unpaidLeaveDays > 0 && (
+                  <span className="text-danger"> - Unpaid Leave (₹{formatCurrency(selectedSlipAmounts.unpaidDeduction)})</span>
+                )}
+                {selectedSlipAmounts.overtimeAmount > 0 && (
+                  <span className="text-success"> + Overtime (₹{formatCurrency(selectedSlipAmounts.overtimeAmount)})</span>
+                )}
+                <span> - DT (₹{formatCurrency(selectedSlipAmounts.deduction)}) = Net Salary (₹{formatCurrency(selectedSlipAmounts.netSalary)})</span>
               </div>
 
               {/* Amount in Words */}
