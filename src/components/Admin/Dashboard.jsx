@@ -172,14 +172,6 @@ const RegularizationRequests = ({ onRequestCountChange }) => {
 
       setMessage({ type: 'success', text: 'Regularization request approved successfully!' });
 
-      // Remove approved request from state
-      const updatedRequests = requests.filter(req => req.id !== selectedRequest.id);
-      setRequests(updatedRequests);
-
-      if (onRequestCountChange) {
-        onRequestCountChange(updatedRequests.filter(r => r.status === 'pending').length);
-      }
-
       setShowApproveModal(false);
       setSelectedRequest(null);
       setApprovedTime('');
@@ -189,13 +181,12 @@ const RegularizationRequests = ({ onRequestCountChange }) => {
       const employeeId = selectedRequest.employee_id;
       const storageKey = `attendance_session_${employeeId}`;
       localStorage.removeItem(storageKey);
-      console.log(`✅ Cleared session storage for employee: ${employeeId}`);
 
       if (addNotification) {
         addNotification({
-          employee_id: selectedRequest.employee_id,
+          employee_id: employeeId,
           title: 'Regularization Request Approved',
-          message: `Your regularization request for ${selectedRequest.attendance_date} has been approved. Please refresh your page to clock in.`,
+          message: `Your regularization request for ${selectedRequest.attendance_date} has been approved.`,
           type: 'regularization_approved'
         });
       }
@@ -231,13 +222,6 @@ const RegularizationRequests = ({ onRequestCountChange }) => {
 
       setMessage({ type: 'success', text: 'Regularization request rejected' });
 
-      const updatedRequests = requests.filter(req => req.id !== selectedRequest.id);
-      setRequests(updatedRequests);
-
-      if (onRequestCountChange) {
-        onRequestCountChange(updatedRequests.filter(r => r.status === 'pending').length);
-      }
-
       setShowRejectModal(false);
       setSelectedRequest(null);
       setRejectionReason('');
@@ -266,14 +250,33 @@ const RegularizationRequests = ({ onRequestCountChange }) => {
 
   const formatDateTime = (datetime) => {
     if (!datetime) return 'N/A';
-    const date = new Date(datetime);
-    return date.toLocaleString('en-US', {
-      day: '2-digit',
-      month: 'short',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    });
+    try {
+      // Handle IST string format: "YYYY-MM-DD HH:MM:SS"
+      if (typeof datetime === 'string' && datetime.includes(' ') && !datetime.includes('T')) {
+        const [datePart, timePart] = datetime.split(' ');
+        const [year, month, day] = datePart.split('-');
+        const [hour, minute] = timePart.split(':');
+        const date = new Date(+year, +month - 1, +day, +hour, +minute);
+        return date.toLocaleString('en-US', {
+          day: '2-digit',
+          month: 'short',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true
+        });
+      }
+      // Handle ISO/UTC format
+      const date = new Date(datetime);
+      return date.toLocaleString('en-US', {
+        day: '2-digit',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+    } catch (e) {
+      return 'N/A';
+    }
   };
 
   const formatDate = (dateString) => {
@@ -454,7 +457,15 @@ const RegularizationRequests = ({ onRequestCountChange }) => {
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       setSelectedRequest(request);
-                                      setApprovedTime(request.requested_clock_out_time);
+                                      // Convert IST string "YYYY-MM-DD HH:MM:SS" to datetime-local "YYYY-MM-DDTHH:MM"
+                                      const reqTime = request.requested_clock_out_time;
+                                      let dtLocalValue = '';
+                                      if (reqTime) {
+                                        // Handle "YYYY-MM-DD HH:MM:SS" format
+                                        const cleaned = reqTime.replace(' ', 'T').substring(0, 16);
+                                        dtLocalValue = cleaned;
+                                      }
+                                      setApprovedTime(dtLocalValue);
                                       setShowApproveModal(true);
                                     }}
                                   >
@@ -1170,9 +1181,11 @@ const AdminDashboard = () => {
       const today = new Date().toISOString().split('T')[0];
       const attendanceRes = await axios.get(`${API_ENDPOINTS.ATTENDANCE_REPORT}?start=${today}&end=${today}`);
       const attendanceData = attendanceRes.data.attendance || [];
-      setTodayAttendance(attendanceData);
-      setFilteredAttendance(attendanceData);
-      updateStats(attendanceData);
+      // Only show employees who have clocked in today
+      const clockedInData = attendanceData.filter(a => a.clock_in);
+      setTodayAttendance(clockedInData);
+      setFilteredAttendance(clockedInData);
+      updateStats(attendanceData); // stats use full data
       setLastUpdated(new Date());
     } catch (error) {
       console.error('Error refreshing attendance:', error);
@@ -1564,7 +1577,7 @@ const AdminDashboard = () => {
                     <th className="fw-normal" style={{ width: '10%' }}>Birthday</th>
                     <th className="fw-normal" style={{ width: '10%' }}>Birth Year</th>
                     <th className="fw-normal" style={{ width: '12%' }}>Age</th>
-                    <th className="fw-normal" style={{ width: '15%' }}>Days Left</th>
+                    {/* <th className="fw-normal" style={{ width: '15%' }}>Days Left</th> */}
                     <th className="fw-normal" style={{ width: '10%' }}>Status</th>
                   </tr>
                 </thead>
@@ -1593,19 +1606,6 @@ const AdminDashboard = () => {
                         </td>
                         <td className="small">
                           <Badge bg="info" pill>{emp.age} years</Badge>
-                        </td>
-                        <td className="small">
-                          {emp.status === 'today' ? (
-                            <Badge bg="success" pill>🎉 Today!</Badge>
-                          ) : emp.status === 'upcoming' ? (
-                            emp.daysLeft <= 7 ? (
-                              <Badge bg="warning" pill>In {emp.daysLeft} days</Badge>
-                            ) : (
-                              <Badge bg="info" pill>{emp.daysLeft} days</Badge>
-                            )
-                          ) : (
-                            <Badge bg="secondary" pill>Passed</Badge>
-                          )}
                         </td>
                         <td className="small">
                           {emp.status === 'today' ? (
@@ -1724,7 +1724,7 @@ const AdminDashboard = () => {
                     <th className="fw-normal d-none d-md-table-cell" style={{ width: '15%' }}>Department</th>
                     <th className="fw-normal" style={{ width: '12%' }}>Joining Date</th>
                     <th className="fw-normal" style={{ width: '15%' }}>Years</th>
-                    <th className="fw-normal" style={{ width: '15%' }}>Days Left</th>
+                    {/* <th className="fw-normal" style={{ width: '15%' }}>Days Left</th> */}
                     <th className="fw-normal" style={{ width: '10%' }}>Status</th>
                     <th className="fw-normal" style={{ width: '8%' }}>Celebration</th>
                   </tr>
@@ -1754,15 +1754,6 @@ const AdminDashboard = () => {
                             <FaStar className="me-1" size={10} />
                             {emp.yearsCompleted} Year{emp.yearsCompleted !== 1 ? 's' : ''}
                           </Badge>
-                        </td>
-                        <td className="small">
-                          {emp.status === 'today' ? (
-                            <Badge bg="success" pill>🎉 Today!</Badge>
-                          ) : emp.daysLeft <= 7 ? (
-                            <Badge bg="warning" pill>In {emp.daysLeft} days</Badge>
-                          ) : (
-                            <Badge bg="info" pill>{emp.daysLeft} days</Badge>
-                          )}
                         </td>
                         <td className="small">
                           {emp.status === 'today' ? (
@@ -1955,7 +1946,7 @@ const AdminDashboard = () => {
                   <Form.Control type="text" placeholder="Search by name or ID..." value={attendanceSearchTerm} onChange={(e) => setAttendanceSearchTerm(e.target.value)} />
                   {attendanceSearchTerm && <Button variant="outline-secondary" onClick={() => setAttendanceSearchTerm('')} size="sm"><FaTimesCircle size={12} /></Button>}
                 </InputGroup>
-                <Badge bg="dark" className="px-3 py-2">{filteredAttendance.length} / {todayAttendance.length} Records</Badge>
+                <Badge bg="dark" className="px-3 py-2">{filteredAttendance.length} Clocked In</Badge>
               </div>
             </Card.Header>
             <Card.Body className="p-0">

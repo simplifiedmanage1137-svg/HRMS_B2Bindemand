@@ -117,28 +117,33 @@ const Attendance = () => {
   const formatTimeIST = (datetime) => {
     if (!datetime) return '--:--';
     try {
+      let hourNum, minute;
       if (typeof datetime === 'string') {
-        if (datetime.includes(' ') && !datetime.includes('T')) {
-          const timePart = datetime.split(' ')[1];
-          const [hour, minute] = timePart.split(':');
-          const hourNum = parseInt(hour);
-          const ampm = hourNum >= 12 ? 'PM' : 'AM';
-          const hour12 = hourNum % 12 || 12;
-          return `${hour12}:${minute.padStart(2, '0')} ${ampm}`;
+        // "YYYY-MM-DD HH:MM:SS" or "YYYY-MM-DD HH:MM"
+        const spaceIdx = datetime.indexOf(' ');
+        if (spaceIdx !== -1 && !datetime.includes('T')) {
+          const timePart = datetime.substring(spaceIdx + 1);
+          const parts = timePart.split(':');
+          hourNum = parseInt(parts[0], 10);
+          minute = parts[1] ? parts[1].padStart(2, '0') : '00';
+        } else if (datetime.includes('T')) {
+          // ISO format
+          const tIdx = datetime.indexOf('T');
+          const timePart = datetime.substring(tIdx + 1, tIdx + 6);
+          const parts = timePart.split(':');
+          hourNum = parseInt(parts[0], 10);
+          minute = parts[1] ? parts[1].padStart(2, '0') : '00';
+        } else {
+          return '--:--';
         }
-        if (datetime.includes('T')) {
-          const match = datetime.match(/T(\d{2}):(\d{2}):(\d{2})/);
-          if (match) {
-            const hour = parseInt(match[1]);
-            const minute = match[2];
-            const ampm = hour >= 12 ? 'PM' : 'AM';
-            const hour12 = hour % 12 || 12;
-            return `${hour12}:${minute} ${ampm}`;
-          }
-        }
+      } else {
+        return '--:--';
       }
-      return '--:--';
-    } catch (error) {
+      if (isNaN(hourNum)) return '--:--';
+      const ampm = hourNum >= 12 ? 'PM' : 'AM';
+      const hour12 = hourNum % 12 === 0 ? 12 : hourNum % 12;
+      return `${hour12}:${minute} ${ampm}`;
+    } catch {
       return '--:--';
     }
   };
@@ -431,16 +436,6 @@ const Attendance = () => {
       return;
     }
 
-    if (!selectedMissedRecord.can_regularize) {
-      setMessage({
-        type: 'danger',
-        text: `Cannot request regularization. You have only completed ${selectedMissedRecord.total_hours_worked} out of ${selectedMissedRecord.expected_hours} required hours.`
-      });
-      setShowRegularizationModal(false);
-      setSelectedMissedRecord(null);
-      return;
-    }
-
     setSubmittingRequest(true);
 
     try {
@@ -455,7 +450,7 @@ const Attendance = () => {
         attendance_id: String(selectedMissedRecord.id),
         requested_clock_out_time: localDateTimeStr,
         attendance_date: selectedMissedRecord.attendance_date,
-        reason: regularizationReason || 'Missed clock-out after completing full shift'
+        reason: regularizationReason || 'Missed clock-out'
       };
 
       const url = API_ENDPOINTS.ATTENDANCE_REGULARIZATION_REQUEST(user.employeeId);
@@ -587,10 +582,12 @@ const Attendance = () => {
           const clockOutTime = parseLocalTime(clockOutValue);
 
           if (clockInTime && clockOutTime && !isNaN(clockInTime.getTime()) && !isNaN(clockOutTime.getTime())) {
-            const diffMs = clockOutTime - clockInTime;
+            let diffMs = clockOutTime - clockInTime;
+            // midnight crossing: clock_out is next day
+            if (diffMs < 0) diffMs += 24 * 60 * 60 * 1000;
             const diffMinutes = diffMs / (1000 * 60);
-            const hours = Math.floor(Math.abs(diffMinutes) / 60);
-            const minutes = Math.round(Math.abs(diffMinutes) % 60);
+            const hours = Math.floor(diffMinutes / 60);
+            const minutes = Math.round(diffMinutes % 60);
 
             totalHoursDisplay = `${hours}h ${minutes}m`;
             totalHours = diffMinutes / 60;
@@ -960,43 +957,21 @@ const Attendance = () => {
 
   const handleOpenRegularizationModal = (record) => {
     if (record.has_clock_out) {
-      setMessage({
-        type: 'info',
-        text: `Attendance for ${record.attendance_date} already has a clock-out time. No regularization needed.`
-      });
+      setMessage({ type: 'info', text: `Attendance for ${record.attendance_date} already has a clock-out time.` });
       return;
     }
-
     if (record.is_regularized) {
-      setMessage({
-        type: 'info',
-        text: `Attendance for ${record.attendance_date} has already been regularized.`
-      });
+      setMessage({ type: 'info', text: `Attendance for ${record.attendance_date} has already been regularized.` });
       return;
     }
-
     if (record.regularization_requested) {
-      setMessage({
-        type: 'warning',
-        text: `You have already requested regularization for ${record.attendance_date}. Please wait for admin approval.`
-      });
-      return;
-    }
-
-    if (!record.can_regularize) {
-      setMessage({
-        type: 'danger',
-        text: `You need to complete ${record.hours_needed} more hours before requesting regularization.`
-      });
+      setMessage({ type: 'warning', text: `Regularization already requested for ${record.attendance_date}. Please wait for admin approval.` });
       return;
     }
 
     setSelectedMissedRecord(record);
-
     const [year, month, day] = record.attendance_date.split('-');
-    const defaultDateTime = `${year}-${month}-${day}T18:00`;
-
-    setRegularizationTime(defaultDateTime);
+    setRegularizationTime(`${year}-${month}-${day}T18:00`);
     setShowRegularizationModal(true);
   };
 
@@ -1059,28 +1034,6 @@ const Attendance = () => {
     const initializeSession = async () => {
       const stored = loadSessionFromStorage();
 
-      if (stored && stored.session_id) {
-        try {
-          const { data: session, error } = await supabase
-            .from('attendance_sessions')
-            .select('is_active')
-            .eq('session_id', stored.session_id)
-            .eq('employee_id', user.employeeId)
-            .single();
-
-          if (error || !session || !session.is_active) {
-            console.log('Stored session is invalid, clearing...');
-            setActiveSession(null);
-            clearSessionFromStorage();
-            setHasClockedOutToday(false);
-          } else {
-            setActiveSession(stored);
-          }
-        } catch (error) {
-          console.error('Error validating session:', error);
-        }
-      }
-
       // Also check today's attendance to determine if we should have active session
       try {
         const response = await axios.get(API_ENDPOINTS.ATTENDANCE_TODAY(user.employeeId));
@@ -1125,6 +1078,16 @@ const Attendance = () => {
     if (user?.employeeId) fetchAttendanceHistory();
   }, [user?.employeeId, attendance]);
 
+  // Poll attendance history every 60s to catch regularization approvals
+  useEffect(() => {
+    if (!user?.employeeId) return;
+    const interval = setInterval(() => {
+      fetchAttendanceHistory();
+      fetchMissedClockOuts();
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [user?.employeeId]);
+
   useEffect(() => {
     if (activeSession && location) {
       const interval = setInterval(sendHeartbeat, 30000);
@@ -1135,23 +1098,18 @@ const Attendance = () => {
 
   // Listen for regularization approved events
   useEffect(() => {
-    const handleRegularizationEvent = () => {
-      console.log('Regularization approved, refreshing session...');
-      fetchTodayAttendance();
-      fetchMissedClockOuts();
-      fetchAttendanceHistory();
-      // Clear any stale session
+    const handleRegularizationEvent = async () => {
+      await fetchTodayAttendance();
+      await fetchMissedClockOuts();
+      await fetchAttendanceHistory();
       setActiveSession(null);
       clearSessionFromStorage();
       setHasClockedOutToday(false);
     };
 
     window.addEventListener('regularizationApproved', handleRegularizationEvent);
-
-    return () => {
-      window.removeEventListener('regularizationApproved', handleRegularizationEvent);
-    };
-  }, []);
+    return () => window.removeEventListener('regularizationApproved', handleRegularizationEvent);
+  }, [user?.employeeId]);
 
   return (
     <div className="p-2 p-md-3 p-lg-4" style={{ backgroundColor: '#f8f9fc', minHeight: '100vh' }}>
