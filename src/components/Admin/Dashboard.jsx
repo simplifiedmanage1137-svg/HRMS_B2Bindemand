@@ -125,9 +125,6 @@ const RegularizationRequests = ({ onRequestCountChange }) => {
     return () => clearInterval(interval);
   }, []);
 
-  // src/components/Admin/AdminDashboard.jsx
-  // Add or update this function at the top:
-
   const formatLateTime = (lateMinutes) => {
     if (!lateMinutes || lateMinutes <= 0) return null;
 
