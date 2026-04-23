@@ -29,7 +29,7 @@ import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 import { useNavigate } from 'react-router-dom';
 import { Bar, Doughnut } from 'react-chartjs-2';
-import { holidays, getHolidaysByRegion } from '../../data/holidays';
+import { holidays, getHolidaysByRegion, isHoliday, getUpcomingHolidays } from '../../data/holidays';
 import {
   Chart as ChartJS,
   CategoryScale,

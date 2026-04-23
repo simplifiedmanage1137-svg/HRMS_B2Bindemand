@@ -31,7 +31,8 @@ import {
     FaEdit,
     FaInfoCircle,
     FaExclamationTriangle,
-    FaTrophy
+    FaTrophy,
+      FaFileAlt 
 } from 'react-icons/fa';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';

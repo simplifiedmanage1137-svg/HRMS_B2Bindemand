@@ -576,7 +576,8 @@ const SalarySlip = () => {
 
   const formatCycleDates = (slip) => {
     if (slip.cycle_start_date && slip.cycle_end_date) {
-      return `${formatDate(slip.cycle_start_date)} to ${formatDate(slip.cycle_end_date)}`;
+      const fmt = (d) => new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+      return `${fmt(slip.cycle_start_date)} to ${fmt(slip.cycle_end_date)}`;
     }
     return `${getMonthName(slip.month)} ${slip.year}`;
   };
