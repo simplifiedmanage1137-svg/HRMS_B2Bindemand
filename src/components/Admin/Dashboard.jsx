@@ -64,7 +64,7 @@ import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 import { useNavigate } from 'react-router-dom';
 import { useNotification } from '../../context/NotificationContext';
-import HistoricalLateMarksUpdater from './HistoricalLateMarksUpdater';
+// import HistoricalLateMarksUpdater from './HistoricalLateMarksUpdater';
 
 ChartJS.register(
   CategoryScale,
@@ -1435,7 +1435,7 @@ const AdminDashboard = () => {
             <FaDownload className="me-1" size={12} />
             Export
           </Button>
-          <HistoricalLateMarksUpdater />
+          {/* <HistoricalLateMarksUpdater /> */}
         </div>
       </div>
 
