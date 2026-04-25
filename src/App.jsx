@@ -33,6 +33,8 @@ import SalarySlip from './components/Employee/SalarySlip';
 import Attendance from './components/Employee/Attendance';
 import EmployeeUpdateRequests from './components/Employee/EmployeeUpdateRequests';
 import EmployeeUpdateForm from './components/Employee/EmployeeUpdateForm';
+import ManagerLeaveRequests from './components/Employee/ManagerLeaveRequests';
+import ManagerShiftUpdate from './components/Employee/ManagerShiftUpdate';
 
 // Context
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -262,6 +264,18 @@ function AppContent() {
             <Route path="/attendance" element={
               <PrivateRoute allowedRoles={['employee']}>
                 <Attendance />
+              </PrivateRoute>
+            } />
+
+            <Route path="/manager/leave-requests" element={
+              <PrivateRoute allowedRoles={['employee']}>
+                <ManagerLeaveRequests />
+              </PrivateRoute>
+            } />
+
+            <Route path="/manager/shift-update" element={
+              <PrivateRoute allowedRoles={['employee']}>
+                <ManagerShiftUpdate />
               </PrivateRoute>
             } />
 

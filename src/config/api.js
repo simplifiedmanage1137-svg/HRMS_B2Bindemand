@@ -6,6 +6,9 @@
 const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
 export const API_ENDPOINTS = {
+    MANAGER_TEAM: `${API_BASE_URL}/api/employees/manager/team`,
+    MANAGER_UPDATE_SHIFT: (employeeId) => `${API_BASE_URL}/api/employees/manager/shift/${employeeId}`,
+
     // Auth endpoints
     LOGIN: `${API_BASE_URL}/api/auth/login`,
     VERIFY: `${API_BASE_URL}/api/auth/verify`,

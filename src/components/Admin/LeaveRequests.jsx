@@ -220,6 +220,27 @@ const LeaveRequests = () => {
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
   };
 
+  const formatDateTime = (dateString) => {
+    if (!dateString) return 'N/A';
+    // Handle IST string "YYYY-MM-DD HH:MM:SS"
+    if (typeof dateString === 'string' && dateString.includes(' ') && !dateString.includes('T')) {
+      const [datePart, timePart] = dateString.split(' ');
+      const [y, mo, d] = datePart.split('-');
+      const [h, mi] = timePart.split(':');
+      const hourNum = parseInt(h);
+      const ampm = hourNum >= 12 ? 'PM' : 'AM';
+      const hour12 = hourNum % 12 === 0 ? 12 : hourNum % 12;
+      return `${d}/${mo}/${y} ${hour12}:${mi} ${ampm} IST`;
+    }
+    // UTC ISO string - convert to IST
+    const d = new Date(dateString);
+    const ist = new Date(d.getTime() + 5.5 * 60 * 60 * 1000);
+    const h = ist.getUTCHours();
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const hour12 = h % 12 === 0 ? 12 : h % 12;
+    return `${String(ist.getUTCDate()).padStart(2,'0')}/${String(ist.getUTCMonth()+1).padStart(2,'0')}/${ist.getUTCFullYear()} ${hour12}:${String(ist.getUTCMinutes()).padStart(2,'0')} ${ampm} IST`;
+  };
+
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -499,9 +520,10 @@ const LeaveRequests = () => {
                   <th className="small fw-normal text-dark d-none d-md-table-cell">Duration</th>
                   <th className="small fw-normal text-dark d-none d-lg-table-cell">Date Range</th>
                   <th className="small fw-normal text-dark d-none d-xl-table-cell">Days</th>
-                  <th className="small fw-normal text-dark">Reason</th>
+                  <th className="small fw-normal text-dark">Reason / Manager</th>
+                  <th className="small fw-normal text-dark d-none d-md-table-cell">Applied At (IST)</th>
                   <th className="small fw-normal text-dark">Status</th>
-                  <th className="small fw-normal text-dark text-center">Actions</th>
+                  <th className="small fw-normal text-dark text-center">View</th>
                 </tr>
               </thead>
 
@@ -561,45 +583,25 @@ const LeaveRequests = () => {
                         </div>
                       </td>
 
+                      {/* Applied At IST */}
+                      <td className="small d-none d-md-table-cell text-nowrap">
+                        {formatDateTime(leave.created_at)}
+                      </td>
+
                       {/* Status Column */}
                       <td className="small">
                         {getStatusBadge(leave.status)}
                       </td>
 
-                      {/* Actions Column */}
+                      {/* View Only - Admin cannot approve/reject */}
                       <td className="text-center">
-                        <div className="d-flex justify-content-center gap-2 gap-sm-3 align-items-center">
-                          {/* View */}
-                          <FaEye
-                            size={16}
-                            className="text-primary"
-                            onClick={() => handleViewDetails(leave)}
-                            title="View Details"
-                            style={{ cursor: "pointer" }}
-                          />
-
-                          {leave.status === "pending" && (
-                            <>
-                              {/* Approve */}
-                              <FaCheck
-                                size={16}
-                                className="text-success"
-                                onClick={() => handleAction(leave, "approve")}
-                                title="Approve Leave"
-                                style={{ cursor: "pointer" }}
-                              />
-
-                              {/* Reject */}
-                              <FaTimes
-                                size={16}
-                                className="text-danger"
-                                onClick={() => handleAction(leave, "reject")}
-                                title="Reject Leave"
-                                style={{ cursor: "pointer" }}
-                              />
-                            </>
-                          )}
-                        </div>
+                        <FaEye
+                          size={16}
+                          className="text-primary"
+                          onClick={() => handleViewDetails(leave)}
+                          title="View Details"
+                          style={{ cursor: 'pointer' }}
+                        />
                       </td>
                     </tr>
                   ))

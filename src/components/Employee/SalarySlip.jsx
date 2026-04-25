@@ -233,14 +233,18 @@ const SalarySlip = () => {
     if (!joiningInfo) return true;
 
     const requestedDate = new Date(year, month - 1, 1);
-    const joiningDate = new Date(joiningInfo.year, joiningInfo.month - 1, 1);
-    const currentDate = new Date();
-    const currentYear = currentDate.getFullYear();
-    const currentMonth = currentDate.getMonth() + 1;
-
+    const joiningDate   = new Date(joiningInfo.year, joiningInfo.month - 1, 1);
     if (requestedDate < joiningDate) return false;
-    if (year > currentYear) return false;
-    if (year === currentYear && month > currentMonth) return false;
+
+    const today = new Date();
+    const m = parseInt(month), y = parseInt(year);
+
+    // Future year
+    if (y > today.getFullYear()) return false;
+    // Future month in current year
+    if (y === today.getFullYear() && m > today.getMonth() + 1) return false;
+    // Current month: only allowed from 27th onwards
+    if (y === today.getFullYear() && m === today.getMonth() + 1 && today.getDate() < 27) return false;
 
     return true;
   };
@@ -553,20 +557,23 @@ const SalarySlip = () => {
   };
 
   const getSlipAmounts = (slip) => {
-    if (!slip) return { monthlySalary: 0, basicSalary: 0, deduction: 0, netSalary: 0, overtimeAmount: 0, overtimeHours: 0, unpaidLeaveDays: 0, unpaidDeduction: 0, perDaySalary: 0, totalWorkingDays: 0 };
+    if (!slip) return { monthlySalary: 0, basicSalary: 0, deduction: 0, netSalary: 0, overtimeAmount: 0, overtimeHours: 0, unpaidLeaveDays: 0, paidLeaveDays: 0, absentDays: 0, presentDays: 0, unpaidDeduction: 0, perDaySalary: 0, totalWorkingDays: 0 };
 
-    const monthlySalary = Number(slip.monthly_salary) || Number(slip.basic_salary) || Number(employee?.gross_salary || employee?.salary) || 0;
-    const basicSalary = Number(slip.basic_salary) || monthlySalary;
-    const deduction = Number(slip.dt) || 200;
-    const overtimeAmount = Number(slip.overtime_amount) || 0;
-    const overtimeHours = Number(slip.overtime_hours) || 0;
-    const unpaidLeaveDays = Number(slip.unpaid_leave_days) || 0;
-    const unpaidDeduction = Number(slip.unpaid_deduction) || 0;
-    const perDaySalary = Number(slip.per_day_salary) || 0;
+    const monthlySalary    = Number(slip.monthly_salary) || Number(slip.basic_salary) || Number(employee?.gross_salary || employee?.salary) || 0;
+    const basicSalary      = Number(slip.basic_salary) || monthlySalary;
+    const deduction        = Number(slip.dt) || 200;
+    const overtimeAmount   = Number(slip.overtime_amount) || 0;
+    const overtimeHours    = Number(slip.overtime_hours) || 0;
+    const unpaidLeaveDays  = Number(slip.unpaid_leave_days) || 0;
+    const paidLeaveDays    = Number(slip.paid_leave_days) || 0;
+    const absentDays       = Number(slip.absent_days) || 0;
+    const presentDays      = Number(slip.present_days) || 0;
+    const unpaidDeduction  = Number(slip.unpaid_deduction) || 0;
+    const perDaySalary     = Number(slip.per_day_salary) || 0;
     const totalWorkingDays = Number(slip.total_working_days) || 0;
-    const netSalary = basicSalary - deduction + overtimeAmount;
+    const netSalary        = basicSalary - deduction + overtimeAmount;
 
-    return { monthlySalary, basicSalary, deduction, netSalary: netSalary < 0 ? 0 : netSalary, overtimeAmount, overtimeHours, unpaidLeaveDays, unpaidDeduction, perDaySalary, totalWorkingDays };
+    return { monthlySalary, basicSalary, deduction, netSalary: netSalary < 0 ? 0 : netSalary, overtimeAmount, overtimeHours, unpaidLeaveDays, paidLeaveDays, absentDays, presentDays, unpaidDeduction, perDaySalary, totalWorkingDays };
   };
 
   const getMonthName = (monthNumber) => {
@@ -773,12 +780,12 @@ const SalarySlip = () => {
                       <FaInfoCircle className="me-1 flex-shrink-0 mt-1" size={10} />
                       <span className="text-wrap">
                         {(() => {
-                          const requestedDate = new Date(selectedYear, selectedMonth - 1, 1);
-                          const joiningDate = new Date(joiningInfo.year, joiningInfo.month - 1, 1);
-                          if (requestedDate < joiningDate) {
-                            return `Cannot generate: Before joining date (${joiningInfo.formattedDate})`;
+                          const m = parseInt(selectedMonth), y = parseInt(selectedYear);
+                          const today = new Date();
+                          if (y === today.getFullYear() && m === today.getMonth() + 1 && today.getDate() < 27) {
+                            return `Salary slip for this month will be available from 27 ${new Date(y, m-1).toLocaleString('en-IN',{month:'long'})} ${y}.`;
                           }
-                          return 'Cannot generate: Future month';
+                          return 'Cannot generate: Before joining date or future month.';
                         })()}
                       </span>
                     </div>
@@ -1173,17 +1180,15 @@ const SalarySlip = () => {
                 </tbody>
               </table>
 
-              {/* ✅ ADD THIS NEW SECTION - Cycle Info Card */}
+              {/* Cycle Info */}
               <div className="mb-3 p-2 bg-light rounded small">
-                <strong>Salary Cycle:</strong> {formatCycleDates(selectedSlip)}
-                <br />
-                <strong>Working Days:</strong> {selectedSlip.total_working_days || 0} days
-                <br />
-                <strong>Present:</strong> {selectedSlip.present_days || 0} days
-                <br />
-                <strong>Unpaid Leave:</strong> {selectedSlip.unpaid_leave_days || 0} days
-                <br />
-                <strong>Per Day Salary:</strong> ₹{formatCurrency(selectedSlip.per_day_salary || 0)}
+                <strong>Salary Cycle:</strong> {formatCycleDates(selectedSlip)}<br />
+                <strong>Total Working Days (Mon-Fri):</strong> {selectedSlipAmounts.totalWorkingDays} days<br />
+                <strong>Present Days:</strong> <span className="text-success">{selectedSlipAmounts.presentDays} days</span><br />
+                {selectedSlipAmounts.paidLeaveDays > 0 && <><strong>Paid Leave:</strong> <span className="text-info">{selectedSlipAmounts.paidLeaveDays} day{selectedSlipAmounts.paidLeaveDays > 1 ? 's' : ''}</span><br /></>}
+                {selectedSlipAmounts.unpaidLeaveDays > 0 && <><strong>Unpaid Leave:</strong> <span className="text-danger">{selectedSlipAmounts.unpaidLeaveDays} day{selectedSlipAmounts.unpaidLeaveDays > 1 ? 's' : ''}</span><br /></>}
+                {selectedSlipAmounts.absentDays > 0 && <><strong>Absent:</strong> <span className="text-danger">{selectedSlipAmounts.absentDays} days</span><br /></>}
+                <strong>Per Day Salary:</strong> ₹{formatCurrency(selectedSlipAmounts.perDaySalary)}
               </div>
 
               {/* Earnings Table */}

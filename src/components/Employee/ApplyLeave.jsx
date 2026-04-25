@@ -226,6 +226,8 @@ const ApplyLeave = () => {
         total_accrued: parseFloat(response.data.total_accrued) || 0,
         used: parseFloat(response.data.used) || 0,
         pending: parseFloat(response.data.pending) || 0,
+        unpaid_used: parseFloat(response.data.unpaid_used) || 0,
+        unpaid_pending: parseFloat(response.data.unpaid_pending) || 0,
         comp_off_balance: parseFloat(response.data.comp_off_balance) || 0,
         total_comp_off_earned: parseFloat(response.data.total_comp_off_earned) || 0,
         total_comp_off_used: parseFloat(response.data.total_comp_off_used) || 0,
@@ -357,6 +359,10 @@ const ApplyLeave = () => {
       newErrors.reason = 'Reason is required';
     } else if (formData.reason.length < 10) {
       newErrors.reason = 'Reason must be at least 10 characters';
+    }
+
+    if (!formData.reporting_manager || !formData.reporting_manager.trim()) {
+      newErrors.reporting_manager = 'Reporting manager is required';
     }
 
     // Check leave balance
@@ -736,7 +742,7 @@ const ApplyLeave = () => {
                 {/* Reporting Manager */}
                 <Form.Group className="mb-4">
                   <Form.Label className="small fw-semibold text-muted">
-                    Reporting Manager
+                    Reporting Manager <span className="text-danger">*</span>
                   </Form.Label>
                   <Form.Control
                     type="text"
@@ -744,10 +750,17 @@ const ApplyLeave = () => {
                     value={formData.reporting_manager}
                     onChange={handleChange}
                     size="sm"
-                    placeholder="Your reporting manager"
-                    readOnly
-                    className="bg-light"
+                    placeholder="Enter reporting manager name"
+                    isInvalid={!!errors.reporting_manager}
                   />
+                  {errors.reporting_manager && (
+                    <Form.Control.Feedback type="invalid">
+                      {errors.reporting_manager}
+                    </Form.Control.Feedback>
+                  )}
+                  <Form.Text className="text-muted small">
+                    Leave request will be sent to this manager for approval
+                  </Form.Text>
                 </Form.Group>
 
                 {/* Balance Error */}
@@ -870,13 +883,27 @@ const ApplyLeave = () => {
                   <span className="fw-semibold">{leaveBalance.total_accrued} days</span>
                 </div>
                 <div className="d-flex justify-content-between mb-1 small">
-                  <span className="text-muted">Used:</span>
+                  <span className="text-muted">Used (Paid):</span>
                   <span className="fw-semibold">{leaveBalance.used} days</span>
                 </div>
-                <div className="d-flex justify-content-between mb-2 small">
-                  <span className="text-muted">Pending:</span>
+                <div className="d-flex justify-content-between mb-1 small">
+                  <span className="text-muted">Pending (Paid):</span>
                   <span className="fw-semibold">{leaveBalance.pending} days</span>
                 </div>
+                {(leaveBalance.unpaid_used > 0 || leaveBalance.unpaid_pending > 0) && (
+                  <>
+                    <div className="d-flex justify-content-between mb-1 small">
+                      <span className="text-danger">Unpaid Used:</span>
+                      <span className="fw-semibold text-danger">{leaveBalance.unpaid_used} days</span>
+                    </div>
+                    {leaveBalance.unpaid_pending > 0 && (
+                      <div className="d-flex justify-content-between mb-1 small">
+                        <span className="text-warning">Unpaid Pending:</span>
+                        <span className="fw-semibold text-warning">{leaveBalance.unpaid_pending} days</span>
+                      </div>
+                    )}
+                  </>
+                )}
 
                 {/* Progress Bar - Only show if eligible or for display */}
                 {leaveBalance.total_accrued > 0 && (

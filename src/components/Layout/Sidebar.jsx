@@ -415,6 +415,20 @@ const Sidebar = () => {
                 />
 
                 <NavItem
+                  to="/manager/leave-requests"
+                  icon={<FaCheckCircle size={18} />}
+                  label="Team Leaves"
+                  onClick={closeSidebar}
+                />
+
+                <NavItem
+                  to="/manager/shift-update"
+                  icon={<FaClock size={18} />}
+                  label="Team Shifts"
+                  onClick={closeSidebar}
+                />
+
+                <NavItem
                   to="/salary-slip"
                   icon={<FaMoneyBill size={18} />}
                   label="Salary Slip"
