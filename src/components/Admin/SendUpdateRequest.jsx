@@ -14,12 +14,21 @@ import {
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 
-const FIELD_OPTIONS = [
+// Check if designation is team leader/manager level
+const isTeamLeader = (designation) => {
+  if (!designation) return false;
+  const d = designation.toLowerCase();
+  return d.includes('team leader') || d.includes('team manager') ||
+         d.includes('tl') || d.includes('lead') || d.includes('manager') ||
+         d.includes('head') || d.includes('supervisor');
+};
+
+const BASE_FIELD_OPTIONS = [
   { value: 'personal',   label: 'Personal Info',      icon: <FaUser className="text-primary" />,     fields: ['first_name','last_name','dob','blood_group'] },
   { value: 'contact',    label: 'Contact Details',     icon: <FaEnvelope className="text-info" />,    fields: ['email','phone'] },
   { value: 'address',    label: 'Address',             icon: <FaMapMarkerAlt className="text-danger" />, fields: ['address','city','state','pincode'] },
   { value: 'bank',       label: 'Bank & ID Proofs',    icon: <FaUniversity className="text-warning" />, fields: ['bank_account_name','account_number','ifsc_code','branch_name','pan_number','aadhar_number'] },
-  { value: 'employment', label: 'Employment Details',  icon: <FaBriefcase className="text-secondary" />, fields: ['designation','department','employment_type','shift_timing','reporting_manager'] },
+  { value: 'employment', label: 'Employment Details',  icon: <FaBriefcase className="text-secondary" />, fields: ['designation','department','employment_type','reporting_manager'], fieldsWithShift: ['designation','department','employment_type','shift_timing','reporting_manager'] },
   { value: 'emergency',  label: 'Emergency Contact',   icon: <FaHeartbeat className="text-danger" />, fields: ['emergency_contact'] },
   { value: 'salary',     label: 'Salary Info',         icon: <FaCreditCard className="text-success" />, fields: ['gross_salary','in_hand_salary'] },
   { value: 'documents',  label: 'Documents Upload',    icon: <FaFileAlt className="text-success" />,  fields: ['documents'], isDocument: true },
@@ -109,6 +118,24 @@ const SendUpdateRequest = () => {
     if (f === 'documents' && selectedFields.includes('documents')) setSelectedDocs([]);
   };
   const toggleDoc = (d) => setSelectedDocs(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]);
+  // Dynamic field options - shift_timing only for team leaders
+  const FIELD_OPTIONS = useMemo(() => {
+    const selectedEmps = employees.filter(e => selectedIds.has(e.employee_id));
+    const anyTeamLeader = selectedEmps.some(e => isTeamLeader(e.designation));
+    const allTeamLeaders = selectedEmps.length > 0 && selectedEmps.every(e => isTeamLeader(e.designation));
+
+    return BASE_FIELD_OPTIONS.map(f => {
+      if (f.value === 'employment') {
+        return {
+          ...f,
+          fields: allTeamLeaders ? f.fieldsWithShift : f.fields,
+          label: f.label + (anyTeamLeader && !allTeamLeaders ? ' (shift excluded for non-TL)' : '')
+        };
+      }
+      return f;
+    });
+  }, [selectedIds, employees]);
+
   const selectAllFields = () => {
     if (selectedFields.length === FIELD_OPTIONS.length) { setSelectedFields([]); setSelectedDocs([]); }
     else setSelectedFields(FIELD_OPTIONS.map(f => f.value));

@@ -81,17 +81,14 @@ const LeaveRequests = () => {
   const fetchLeaveRequests = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(`${API_ENDPOINTS.LEAVES}?all=true`);
-      console.log('Leave requests fetched:', response.data);
+      // Admin sees only Team Leader/Manager leave requests (for approve/reject)
+      const response = await axios.get(`${API_ENDPOINTS.LEAVES}?all=true&team_leader=true`);
       setLeaveRequests(response.data);
       setFilteredRequests(response.data);
       setMessage({ type: '', text: '' });
     } catch (error) {
       console.error('Error fetching leave requests:', error);
-      setMessage({
-        type: 'danger',
-        text: error.response?.data?.message || 'Failed to load leave requests'
-      });
+      setMessage({ type: 'danger', text: error.response?.data?.message || 'Failed to load leave requests' });
     } finally {
       setLoading(false);
     }
@@ -307,7 +304,7 @@ const LeaveRequests = () => {
       <div className="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center mb-4 gap-3">
         <h2 className="h4 mb-0 d-flex align-items-center">
           <FaCalendarAlt className="me-2 text-dark" />
-          Leave Requests Management
+          Team Leader Leave Requests
         </h2>
         <Button
           variant="dark"
@@ -523,7 +520,7 @@ const LeaveRequests = () => {
                   <th className="small fw-normal text-dark">Reason / Manager</th>
                   <th className="small fw-normal text-dark d-none d-md-table-cell">Applied At (IST)</th>
                   <th className="small fw-normal text-dark">Status</th>
-                  <th className="small fw-normal text-dark text-center">View</th>
+                  <th className="small fw-normal text-dark text-center">Actions</th>
                 </tr>
               </thead>
 
@@ -593,15 +590,35 @@ const LeaveRequests = () => {
                         {getStatusBadge(leave.status)}
                       </td>
 
-                      {/* View Only - Admin cannot approve/reject */}
+                      {/* Actions - Approve/Reject for pending TL leaves */}
                       <td className="text-center">
-                        <FaEye
-                          size={16}
-                          className="text-primary"
-                          onClick={() => handleViewDetails(leave)}
-                          title="View Details"
-                          style={{ cursor: 'pointer' }}
-                        />
+                        <div className="d-flex align-items-center justify-content-center gap-1">
+                          <FaEye
+                            size={16}
+                            className="text-primary"
+                            onClick={() => handleViewDetails(leave)}
+                            title="View Details"
+                            style={{ cursor: 'pointer' }}
+                          />
+                          {leave.status === 'pending' && (
+                            <>
+                              <FaCheck
+                                size={14}
+                                className="text-success ms-1"
+                                onClick={() => handleAction(leave, 'approve')}
+                                title="Approve"
+                                style={{ cursor: 'pointer' }}
+                              />
+                              <FaTimes
+                                size={14}
+                                className="text-danger ms-1"
+                                onClick={() => handleAction(leave, 'reject')}
+                                title="Reject"
+                                style={{ cursor: 'pointer' }}
+                              />
+                            </>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))
