@@ -770,16 +770,26 @@ const Attendance = () => {
       let history = response.data.attendance || [];
       const completeHistory = generateLast30DaysAttendance(history);
 
+      // Filter for period stats
+      const currentYear = today.getFullYear();
+      const currentMonth = today.getMonth();
+      const periodStart = new Date(currentYear, currentMonth, 26);
+      const periodEnd = new Date(currentYear, currentMonth + 1, 25);
+      const periodHistory = completeHistory.filter(record => {
+        const recordDate = new Date(record.date);
+        return recordDate >= periodStart && recordDate <= periodEnd;
+      });
+
       setAttendanceHistory(completeHistory);
-      calculateMonthlyStats(completeHistory);
-      updateChartData(completeHistory);
+      calculateMonthlyStats(periodHistory);
+      updateChartData(periodHistory);
 
     } catch (error) {
       console.error('❌ Error fetching attendance history:', error);
       const emptyHistory = generateLast30DaysAttendance([]);
       setAttendanceHistory(emptyHistory);
-      calculateMonthlyStats(emptyHistory);
-      updateChartData(emptyHistory);
+      calculateMonthlyStats([]);
+      updateChartData([]);
     }
   };
 
