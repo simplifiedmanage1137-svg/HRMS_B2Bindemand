@@ -28,7 +28,7 @@ const PRIORITY_CONFIG = {
   urgent: { label: 'Urgent', bg: 'danger'    },
 };
 
-const Announcements = () => {
+const Announcements = ({ embedded = false }) => {
   const [announcements, setAnnouncements] = useState([]);
   const [loading, setLoading]             = useState(true);
   const [submitting, setSubmitting]       = useState(false);
@@ -125,11 +125,13 @@ const Announcements = () => {
   const formatDate = (d) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
 
   return (
-    <div className="p-2 p-md-3 p-lg-4" style={{ backgroundColor: '#f8f9fc', minHeight: '100vh' }}>
-      <h5 className="mb-4 d-flex align-items-center">
-        <FaBullhorn className="me-2 text-primary" />
-        Announcements & Broadcasts
-      </h5>
+    <div className={embedded ? '' : 'p-2 p-md-3 p-lg-4'} style={embedded ? {} : { backgroundColor: '#f8f9fc', minHeight: '100vh' }}>
+      {!embedded && (
+        <h5 className="mb-4 d-flex align-items-center">
+          <FaBullhorn className="me-2 text-primary" />
+          Announcements & Broadcasts
+        </h5>
+      )}
 
       {message.text && (
         <Alert variant={message.type} dismissible onClose={() => setMessage({ type: '', text: '' })} className="mb-3 py-2 small">

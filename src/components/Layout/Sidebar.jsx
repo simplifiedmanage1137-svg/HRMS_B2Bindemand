@@ -395,19 +395,11 @@ const Sidebar = () => {
                   }}
                 />
 
-                {/* SEND NOTICE / WARNING LINK */}
+                {/* BROADCAST CENTER LINK */}
                 <NavItem
-                  to="/admin/send-notice"
-                  icon={<FaExclamationTriangle size={18} />}
-                  label="Send Notice"
-                  onClick={closeSidebar}
-                />
-
-                {/* ANNOUNCEMENTS LINK */}
-                <NavItem
-                  to="/admin/announcements"
+                  to="/admin/broadcast"
                   icon={<FaBullhorn size={18} />}
-                  label="Announcements"
+                  label="Broadcast"
                   onClick={closeSidebar}
                 />
               </>

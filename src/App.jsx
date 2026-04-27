@@ -24,6 +24,7 @@ import SendUpdateRequest from './components/Admin/SendUpdateRequest';
 import UpdateApprovals from './components/Admin/UpdateApprovals';  // ✅ IMPORT THIS
 import SendNotice from './components/Admin/SendNotice';
 import Announcements from './components/Admin/Announcements';
+import AdminBroadcast from './components/Admin/AdminBroadcast';
 import EmployeeProfileView from './components/Admin/EmployeeProfileView';
 
 // Employee Components
@@ -226,19 +227,15 @@ function AppContent() {
               </PrivateRoute>
             } />
 
-            {/* ✅ ANNOUNCEMENTS ROUTE */}
-            <Route path="/admin/announcements" element={
+            {/* BROADCAST CENTER - combined notice + announcements */}
+            <Route path="/admin/broadcast" element={
               <PrivateRoute allowedRoles={['admin']}>
-                <Announcements />
+                <AdminBroadcast />
               </PrivateRoute>
             } />
-
-            {/* ✅ SEND NOTICE / WARNING ROUTE */}
-            <Route path="/admin/send-notice" element={
-              <PrivateRoute allowedRoles={['admin']}>
-                <SendNotice />
-              </PrivateRoute>
-            } />
+            {/* old routes redirect */}
+            <Route path="/admin/announcements" element={<Navigate to="/admin/broadcast" replace />} />
+            <Route path="/admin/send-notice" element={<Navigate to="/admin/broadcast" replace />} />
 
             {/* Employee Routes */}
             <Route path="/employee/dashboard" element={
