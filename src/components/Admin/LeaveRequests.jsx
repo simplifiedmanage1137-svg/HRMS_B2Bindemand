@@ -81,13 +81,16 @@ const LeaveRequests = () => {
   const fetchLeaveRequests = async () => {
     try {
       setLoading(true);
-      // Admin sees only Team Leader/Manager leave requests (for approve/reject)
-      const response = await axios.get(`${API_ENDPOINTS.LEAVES}?all=true&team_leader=true`);
+      console.log('🔍 Fetching all leave requests for admin...');
+      // Admin sees all leave requests (not just team leaders)
+      const response = await axios.get(`${API_ENDPOINTS.LEAVES}?all=true`);
+      console.log('✅ Leave requests fetched:', response.data.length, 'records');
       setLeaveRequests(response.data);
       setFilteredRequests(response.data);
       setMessage({ type: '', text: '' });
     } catch (error) {
-      console.error('Error fetching leave requests:', error);
+      console.error('❌ Error fetching leave requests:', error);
+      console.error('Error response:', error.response?.data);
       setMessage({ type: 'danger', text: error.response?.data?.message || 'Failed to load leave requests' });
     } finally {
       setLoading(false);
@@ -134,10 +137,10 @@ const LeaveRequests = () => {
     setProcessing(true);
 
     try {
-      // Only send status and comments - no extra fields
+      // Only send status and remarks - no extra fields
       const response = await axios.put(API_ENDPOINTS.LEAVE_STATUS(id), {
         status,
-        comments: comments || null
+        remarks: comments || null
       });
 
       console.log('Update response:', response.data);
@@ -304,7 +307,7 @@ const LeaveRequests = () => {
       <div className="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center mb-4 gap-3">
         <h2 className="h4 mb-0 d-flex align-items-center">
           <FaCalendarAlt className="me-2 text-dark" />
-          Team Leader Leave Requests
+          Leave Requests List
         </h2>
         <Button
           variant="dark"
@@ -590,7 +593,7 @@ const LeaveRequests = () => {
                         {getStatusBadge(leave.status)}
                       </td>
 
-                      {/* Actions - Approve/Reject for pending TL leaves */}
+                      {/* Actions - Admin can approve/reject any pending leave */}
                       <td className="text-center">
                         <div className="d-flex align-items-center justify-content-center gap-1">
                           <FaEye
@@ -809,10 +812,10 @@ const LeaveRequests = () => {
                     <Card.Body className="p-2 p-md-3">
                       <h6 className="text-primary mb-2 small fw-semibold">Status</h6>
                       <p className="mb-2">{getStatusBadge(selectedLeave.status)}</p>
-                      {selectedLeave.admin_comments && (
+                      {selectedLeave.remarks && (
                         <div className="mt-2 p-2 bg-white rounded">
                           <small className="text-muted d-block">Admin Comments:</small>
-                          <p className="mb-0 small">{selectedLeave.admin_comments}</p>
+                          <p className="mb-0 small">{selectedLeave.remarks}</p>
                         </div>
                       )}
                     </Card.Body>
