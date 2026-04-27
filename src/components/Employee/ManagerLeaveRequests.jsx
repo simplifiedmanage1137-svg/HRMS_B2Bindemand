@@ -28,6 +28,7 @@ const ManagerLeaveRequests = ({ embedded = false }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [message, setMessage] = useState({ type: '', text: '' });
   const [stats, setStats] = useState({ total: 0, pending: 0, approved: 0, rejected: 0 });
+  const [showHistory, setShowHistory] = useState(false);
 
   useEffect(() => { fetchLeaveRequests(); }, []);
 
@@ -187,53 +188,89 @@ const ManagerLeaveRequests = ({ embedded = false }) => {
         </Alert>
       )}
 
-      {/* Stats */}
-      <Row className="mb-4 g-2">
-        {[
-          { label: 'Total', value: stats.total, color: 'dark' },
-          { label: 'Pending', value: stats.pending, color: 'warning' },
-          { label: 'Approved', value: stats.approved, color: 'success' },
-          { label: 'Rejected', value: stats.rejected, color: 'danger' }
-        ].map(s => (
-          <Col xs={6} md={3} key={s.label}>
-            <Card className="border-0 shadow-sm text-center">
-              <Card.Body className="p-2">
-                <h5 className={`mb-0 fw-bold text-${s.color}`}>{s.value}</h5>
-                <small className="text-muted">{s.label}</small>
-              </Card.Body>
-            </Card>
-          </Col>
-        ))}
-      </Row>
+      {/* Stats — only in history view */}
+      {showHistory && (
+        <Row className="mb-3 g-2">
+          {[
+            { label: 'Total', value: stats.total, color: 'dark' },
+            { label: 'Pending', value: stats.pending, color: 'warning' },
+            { label: 'Approved', value: stats.approved, color: 'success' },
+            { label: 'Rejected', value: stats.rejected, color: 'danger' }
+          ].map(s => (
+            <Col xs={6} md={3} key={s.label}>
+              <Card className="border-0 shadow-sm text-center">
+                <Card.Body className="p-2">
+                  <h5 className={`mb-0 fw-bold text-${s.color}`}>{s.value}</h5>
+                  <small className="text-muted">{s.label}</small>
+                </Card.Body>
+              </Card>
+            </Col>
+          ))}
+        </Row>
+      )}
 
-      {/* Filters */}
-      <Card className="mb-3 border-0 shadow-sm">
-        <Card.Body className="p-2 p-md-3">
-          <Row className="g-2">
-            <Col xs={12} md={7}>
-              <div className="d-flex gap-1 flex-wrap">
-                {['pending', 'approved', 'rejected', 'all'].map(f => (
-                  <Button key={f} size="sm"
-                    variant={filter === f ? (f === 'pending' ? 'warning' : f === 'approved' ? 'success' : f === 'rejected' ? 'danger' : 'primary') : `outline-${f === 'pending' ? 'warning' : f === 'approved' ? 'success' : f === 'rejected' ? 'danger' : 'secondary'}`}
-                    onClick={() => setFilter(f)}
-                    className="px-2 px-sm-3 text-capitalize"
-                  >
-                    {f === 'all' ? `All (${stats.total})` : `${f.charAt(0).toUpperCase() + f.slice(1)} (${stats[f]})`}
-                  </Button>
-                ))}
-              </div>
-            </Col>
-            <Col xs={12} md={5}>
-              <InputGroup size="sm">
-                <InputGroup.Text className="bg-light border-0"><FaSearch size={12} className="text-muted" /></InputGroup.Text>
-                <Form.Control type="text" placeholder="Search by name, type..." value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)} className="border-0 bg-light" />
-                {searchTerm && <Button variant="outline-secondary" size="sm" onClick={() => setSearchTerm('')} className="border-0"><FaTimes size={12} /></Button>}
-              </InputGroup>
-            </Col>
-          </Row>
-        </Card.Body>
-      </Card>
+      {/* Pending / History Toggle */}
+      <div className="d-flex align-items-center justify-content-between mb-3">
+        <div className="d-flex" style={{ gap: '4px' }}>
+          <button
+            onClick={() => { setShowHistory(false); setFilter('pending'); setSearchTerm(''); }}
+            style={{
+              padding: '7px 16px', border: 'none', fontSize: '13px', cursor: 'pointer',
+              borderBottom: !showHistory ? '3px solid #0d6efd' : '3px solid transparent',
+              background: 'transparent',
+              color: !showHistory ? '#0d6efd' : '#6c757d',
+              fontWeight: !showHistory ? '600' : '400'
+            }}
+          >
+            Pending Requests
+            {stats.pending > 0 && (
+              <span className="ms-2 badge rounded-pill bg-warning text-dark" style={{ fontSize: '11px' }}>
+                {stats.pending}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => { setShowHistory(true); setFilter('all'); setSearchTerm(''); }}
+            style={{
+              padding: '7px 16px', border: 'none', fontSize: '13px', cursor: 'pointer',
+              borderBottom: showHistory ? '3px solid #0d6efd' : '3px solid transparent',
+              background: 'transparent',
+              color: showHistory ? '#0d6efd' : '#6c757d',
+              fontWeight: showHistory ? '600' : '400'
+            }}
+          >
+            Leave History
+            <span className="ms-2 badge rounded-pill bg-secondary" style={{ fontSize: '11px' }}>
+              {stats.total}
+            </span>
+          </button>
+        </div>
+
+        {/* Search — only in history */}
+        {showHistory && (
+          <InputGroup size="sm" style={{ maxWidth: '220px' }}>
+            <InputGroup.Text className="bg-light border-0"><FaSearch size={11} className="text-muted" /></InputGroup.Text>
+            <Form.Control type="text" placeholder="Search..." value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)} className="border-0 bg-light" />
+            {searchTerm && <Button variant="outline-secondary" size="sm" onClick={() => setSearchTerm('')} className="border-0"><FaTimes size={11} /></Button>}
+          </InputGroup>
+        )}
+      </div>
+
+      {/* History status filter — only when history tab active */}
+      {showHistory && (
+        <div className="d-flex gap-1 flex-wrap mb-3">
+          {['all', 'approved', 'rejected'].map(f => (
+            <Button key={f} size="sm"
+              variant={filter === f ? (f === 'approved' ? 'success' : f === 'rejected' ? 'danger' : 'primary') : `outline-${f === 'approved' ? 'success' : f === 'rejected' ? 'danger' : 'secondary'}`}
+              onClick={() => setFilter(f)}
+              className="px-3 text-capitalize"
+            >
+              {f === 'all' ? `All (${stats.total})` : `${f.charAt(0).toUpperCase() + f.slice(1)} (${stats[f]})`}
+            </Button>
+          ))}
+        </div>
+      )}
 
       {/* Table */}
       <Card className="border-0 shadow-sm">
@@ -297,7 +334,9 @@ const ManagerLeaveRequests = ({ embedded = false }) => {
                   <tr>
                     <td colSpan="9" className="text-center py-5">
                       <FaCalendarAlt size={35} className="text-muted mb-2 opacity-50" />
-                      <p className="text-muted mb-0 small">No leave requests found</p>
+                      <p className="text-muted mb-0 small">
+                        {!showHistory ? 'No pending leave requests 🎉' : 'No leave requests found'}
+                      </p>
                     </td>
                   </tr>
                 )}
