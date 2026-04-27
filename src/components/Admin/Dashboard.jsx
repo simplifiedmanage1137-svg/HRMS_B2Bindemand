@@ -64,6 +64,7 @@ import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 import { useNavigate } from 'react-router-dom';
 import { useNotification } from '../../context/NotificationContext';
+import LeaveRequestsTest from './LeaveRequestsTest';
 // import HistoricalLateMarksUpdater from './HistoricalLateMarksUpdater';
 
 ChartJS.register(
@@ -847,6 +848,15 @@ const AdminDashboard = () => {
     };
   }, []);
 
+  // Debug: Log leave requests state changes
+  useEffect(() => {
+    console.log('📊 Leave Requests State Updated:', {
+      total: leaveRequests.length,
+      filtered: filteredLeaveRequests.length,
+      sample: leaveRequests.slice(0, 2)
+    });
+  }, [leaveRequests, filteredLeaveRequests]);
+
   useEffect(() => {
     if (!attendanceSearchTerm.trim()) {
       setFilteredAttendance(todayAttendance);
@@ -1191,12 +1201,32 @@ const AdminDashboard = () => {
 
   const refreshLeaveRequests = async () => {
     try {
-      const leavesRes = await axios.get(API_ENDPOINTS.LEAVES);
-      const pendingLeaves = leavesRes.data.filter(leave => leave.status === 'pending');
+      console.log('🔄 Fetching pending leave requests for admin dashboard...');
+      const leavesRes = await axios.get(`${API_ENDPOINTS.LEAVES}?all=true`);
+      console.log('📊 Leave requests response:', leavesRes.data);
+      
+      // Handle both array response and object with data property
+      let allLeaves = [];
+      if (Array.isArray(leavesRes.data)) {
+        allLeaves = leavesRes.data;
+      } else if (leavesRes.data && Array.isArray(leavesRes.data.data)) {
+        allLeaves = leavesRes.data.data;
+      } else if (leavesRes.data && Array.isArray(leavesRes.data.leaves)) {
+        allLeaves = leavesRes.data.leaves;
+      }
+      
+      const pendingLeaves = allLeaves.filter(leave => leave.status === 'pending');
+      
+      console.log(`✅ Found ${allLeaves.length} total leaves, ${pendingLeaves.length} pending`);
+      
       setLeaveRequests(pendingLeaves);
       setFilteredLeaveRequests(pendingLeaves);
     } catch (error) {
-      console.error('Error refreshing leave requests:', error);
+      console.error('❌ Error refreshing leave requests:', error);
+      console.error('Error response:', error.response?.data);
+      // Set empty arrays on error to prevent UI issues
+      setLeaveRequests([]);
+      setFilteredLeaveRequests([]);
     }
   };
 
@@ -2050,10 +2080,21 @@ const AdminDashboard = () => {
             </Card.Body>
           </Card>
 
+          {/* Debug Component - Remove after testing */}
+          <LeaveRequestsTest />
+
           {/* Pending Leave Requests */}
           <Card className="mb-4 border-0 shadow-sm">
             <Card.Header className="bg-light d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center py-3 gap-2">
-              <h5 className="mb-0 text-dark d-flex align-items-center"><FaCalendarAlt className="me-2" /><span>Pending Leave Requests</span></h5>
+              <h5 className="mb-0 text-dark d-flex align-items-center">
+                <FaCalendarAlt className="me-2" />
+                <span>Pending Leave Requests</span>
+                {filteredLeaveRequests.length > 0 && (
+                  <Badge bg="warning" pill className="ms-2">
+                    {filteredLeaveRequests.length}
+                  </Badge>
+                )}
+              </h5>
               <div className="d-flex gap-2">
                 <InputGroup size="sm" style={{ width: '250px' }}>
                   <InputGroup.Text><FaSearch size={12} /></InputGroup.Text>
@@ -2061,10 +2102,28 @@ const AdminDashboard = () => {
                   {leaveSearchTerm && <Button variant="outline-secondary" onClick={() => setLeaveSearchTerm('')} size="sm"><FaTimesCircle size={12} /></Button>}
                 </InputGroup>
                 <Badge bg="light" text="dark" className="px-3 py-2">{filteredLeaveRequests.length} / {leaveRequests.length} Pending</Badge>
+                <Button 
+                  variant="outline-primary" 
+                  size="sm" 
+                  onClick={() => navigate('/admin/leave-requests')}
+                  className="d-flex align-items-center"
+                >
+                  <FaEye className="me-1" size={12} />
+                  View All
+                </Button>
+                <Button 
+                  variant="outline-success" 
+                  size="sm" 
+                  onClick={refreshLeaveRequests}
+                  className="d-flex align-items-center"
+                >
+                  <FaSyncAlt className="me-1" size={12} />
+                  Refresh
+                </Button>
               </div>
             </Card.Header>
             <Card.Body className="p-0">
-              <div className="table-responsive" style={{ maxHeight: '200px', overflowY: 'auto' }}>
+              <div className="table-responsive" style={{ maxHeight: '300px', overflowY: 'auto' }}>
                 <Table striped size="sm" className="mb-0">
                   <thead className="bg-light sticky-top">
                     <tr className="small">
@@ -2073,27 +2132,84 @@ const AdminDashboard = () => {
                       <th className="fw-normal d-none d-md-table-cell">Leave Type</th>
                       <th className="fw-normal">Date Range</th>
                       <th className="fw-normal">Days</th>
+                      <th className="fw-normal">Applied Date</th>
                       <th className="fw-normal">Status</th>
+                      <th className="fw-normal text-center">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredLeaveRequests.length > 0 ? (
-                      filteredLeaveRequests.map((leave, index) => (
+                      filteredLeaveRequests.slice(0, 10).map((leave, index) => (
                         <tr key={leave.id}>
                           <td className="text-center">{index + 1}</td>
-                          <td className="small"><div className="text-truncate" style={{ maxWidth: '100px' }}>{leave.first_name} {leave.last_name}</div><small className="text-muted">{leave.employee_id}</small></td>
-                          <td className="d-none d-md-table-cell"><Badge bg="secondary">{leave.leave_type}</Badge></td>
-                          <td className="small"><span className="text-nowrap">{new Date(leave.start_date).toLocaleDateString()}</span>{leave.start_date !== leave.end_date && <span className="text-nowrap d-block">- {new Date(leave.end_date).toLocaleDateString()}</span>}</td>
-                          <td>{leave.days_count || 1}</td>
-                          <td><Badge bg="warning">Pending</Badge></td>
+                          <td className="small">
+                            <div className="text-truncate" style={{ maxWidth: '100px' }}>
+                              {leave.first_name} {leave.last_name}
+                            </div>
+                            <small className="text-muted">{leave.employee_id}</small>
+                          </td>
+                          <td className="d-none d-md-table-cell">
+                            <Badge bg="secondary" className="small">{leave.leave_type}</Badge>
+                          </td>
+                          <td className="small">
+                            <span className="text-nowrap">{new Date(leave.start_date).toLocaleDateString()}</span>
+                            {leave.start_date !== leave.end_date && (
+                              <span className="text-nowrap d-block">- {new Date(leave.end_date).toLocaleDateString()}</span>
+                            )}
+                          </td>
+                          <td className="small fw-bold">{leave.days_count || 1}</td>
+                          <td className="small">
+                            {leave.applied_date ? new Date(leave.applied_date).toLocaleDateString() : 'N/A'}
+                          </td>
+                          <td>
+                            <Badge bg="warning" className="small">Pending</Badge>
+                          </td>
+                          <td className="text-center">
+                            <Button 
+                              variant="outline-primary" 
+                              size="sm"
+                              onClick={() => navigate('/admin/leave-requests')}
+                              title="View Details"
+                            >
+                              <FaEye size={12} />
+                            </Button>
+                          </td>
                         </tr>
                       ))
                     ) : (
-                      <tr><td colSpan="6" className="text-center py-4"><FaCalendarAlt size={30} className="text-muted mb-2 opacity-50" /><p className="text-muted mb-0">No pending leave requests</p></td></tr>
+                      <tr>
+                        <td colSpan="8" className="text-center py-4">
+                          <FaCalendarAlt size={30} className="text-muted mb-2 opacity-50" />
+                          <p className="text-muted mb-0">No pending leave requests found</p>
+                          <Button 
+                            variant="link" 
+                            size="sm" 
+                            onClick={() => navigate('/admin/leave-requests')}
+                            className="mt-2"
+                          >
+                            View All Leave Requests →
+                          </Button>
+                        </td>
+                      </tr>
                     )}
                   </tbody>
                 </Table>
               </div>
+              {filteredLeaveRequests.length > 10 && (
+                <div className="p-3 text-center border-top">
+                  <small className="text-muted">
+                    Showing first 10 of {filteredLeaveRequests.length} pending requests
+                  </small>
+                  <Button 
+                    variant="link" 
+                    size="sm" 
+                    onClick={() => navigate('/admin/leave-requests')}
+                    className="ms-2"
+                  >
+                    View All →
+                  </Button>
+                </div>
+              )}
             </Card.Body>
           </Card>
 
