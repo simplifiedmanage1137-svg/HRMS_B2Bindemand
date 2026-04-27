@@ -2390,7 +2390,7 @@ const AdminDashboard = () => {
               </div>
 
               {/* Legend */}
-              <div className="mt-3 pt-2 border-top">
+              <div className="mt-3 pt8-2 border-top">
                 <div className="d-flex flex-wrap justify-content-between align-items-center gap-2">
                   <small className="text-muted">
                     Showing {filteredEmployees.length} of {employeeLeaveBalances.length} employees
