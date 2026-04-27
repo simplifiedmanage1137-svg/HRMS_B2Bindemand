@@ -70,6 +70,17 @@ export const API_ENDPOINTS = {
     OVERTIME_SUMMARY: (employeeId, month, year) => 
         `${API_BASE_URL}/api/attendance/overtime/${employeeId}/${month}/${year}`,
 
+    // Announcement endpoints
+    ANNOUNCEMENTS: `${API_BASE_URL}/api/announcements`,
+    ANNOUNCEMENT_DELETE: (id) => `${API_BASE_URL}/api/announcements/${id}`,
+
+    // Notice/Warning endpoints
+    NOTICES: `${API_BASE_URL}/api/notices`,
+    NOTICE_BY_ID: (id) => `${API_BASE_URL}/api/notices/${id}`,
+    NOTICES_FOR_EMPLOYEE: (employeeId) => `${API_BASE_URL}/api/notices/employee/${employeeId}`,
+    NOTICE_READ: (id) => `${API_BASE_URL}/api/notices/${id}/read`,
+    NOTICE_DELETE: (id) => `${API_BASE_URL}/api/notices/${id}`,
+
     // Notification endpoints
     NOTIFICATIONS: `${API_BASE_URL}/api/notifications`,
     NOTIFICATION_READ: (id) => `${API_BASE_URL}/api/notifications/${id}/read`,

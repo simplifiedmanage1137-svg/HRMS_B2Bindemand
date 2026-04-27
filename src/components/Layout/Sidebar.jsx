@@ -21,7 +21,10 @@ import {
   FaEdit,
   FaCheckCircle,
   FaHourglassHalf,
-  FaTrophy
+  FaTrophy,
+  FaExclamationTriangle,
+  FaUserTie,
+  FaBullhorn
 } from 'react-icons/fa';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
@@ -35,6 +38,7 @@ const Sidebar = () => {
   const [isMobile, setIsMobile] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [employeeDesignation, setEmployeeDesignation] = useState('');
   const [overtimeStats, setOvertimeStats] = useState({
     hasOvertime: false,
     totalHours: 0
@@ -117,6 +121,7 @@ const Sidebar = () => {
       if (response.data) {
         const fullName = `${response.data.first_name || ''} ${response.data.last_name || ''}`.trim();
         setEmployeeName(fullName || 'Employee');
+        setEmployeeDesignation(response.data.designation || '');
       }
     } catch (error) {
       console.error('Error fetching employee name:', error);
@@ -389,6 +394,22 @@ const Sidebar = () => {
                     markNotificationsAsRead();
                   }}
                 />
+
+                {/* SEND NOTICE / WARNING LINK */}
+                <NavItem
+                  to="/admin/send-notice"
+                  icon={<FaExclamationTriangle size={18} />}
+                  label="Send Notice"
+                  onClick={closeSidebar}
+                />
+
+                {/* ANNOUNCEMENTS LINK */}
+                <NavItem
+                  to="/admin/announcements"
+                  icon={<FaBullhorn size={18} />}
+                  label="Announcements"
+                  onClick={closeSidebar}
+                />
               </>
             ) : (
               // ✅ EMPLOYEE MENU ITEMS
@@ -415,20 +436,6 @@ const Sidebar = () => {
                 />
 
                 <NavItem
-                  to="/manager/leave-requests"
-                  icon={<FaCheckCircle size={18} />}
-                  label="Team Leaves"
-                  onClick={closeSidebar}
-                />
-
-                <NavItem
-                  to="/manager/shift-update"
-                  icon={<FaClock size={18} />}
-                  label="Team Shifts"
-                  onClick={closeSidebar}
-                />
-
-                <NavItem
                   to="/salary-slip"
                   icon={<FaMoneyBill size={18} />}
                   label="Salary Slip"
@@ -442,6 +449,22 @@ const Sidebar = () => {
                   label="Update Requests"
                   onClick={closeSidebar}
                 />
+
+                {/* My Team - sirf Team Leader/Manager ko dikhega */}
+                {(() => {
+                  const d = (employeeDesignation || '').toLowerCase();
+                  const isTL = d.includes('team leader') || d.includes('team manager') ||
+                               d.includes('tl') || d.includes('lead') || d.includes('manager') ||
+                               d.includes('head') || d.includes('supervisor');
+                  return isTL ? (
+                    <NavItem
+                      to="/manager/panel"
+                      icon={<FaUserTie size={18} />}
+                      label="My Team"
+                      onClick={closeSidebar}
+                    />
+                  ) : null;
+                })()}
               </>
             )}
           </nav>

@@ -13,7 +13,7 @@ import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 import { useAuth } from '../../context/AuthContext';
 
-const ManagerLeaveRequests = () => {
+const ManagerLeaveRequests = ({ embedded = false }) => {
   const { user } = useAuth();
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [filteredRequests, setFilteredRequests] = useState([]);
@@ -161,16 +161,25 @@ const ManagerLeaveRequests = () => {
   }
 
   return (
-    <div className="p-2 p-md-3 p-lg-4">
-      <div className="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center mb-4 gap-3">
-        <h5 className="mb-0 d-flex align-items-center">
-          <FaCalendarAlt className="me-2 text-primary" />
-          Team Leave Requests
-        </h5>
-        <Button variant="outline-primary" size="sm" onClick={fetchLeaveRequests}>
-          <FaSyncAlt className="me-1" size={12} /> Refresh
-        </Button>
-      </div>
+    <div className={embedded ? '' : 'p-2 p-md-3 p-lg-4'}>
+      {!embedded && (
+        <div className="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center mb-4 gap-3">
+          <h5 className="mb-0 d-flex align-items-center">
+            <FaCalendarAlt className="me-2 text-primary" />
+            Team Leave Requests
+          </h5>
+          <Button variant="outline-primary" size="sm" onClick={fetchLeaveRequests}>
+            <FaSyncAlt className="me-1" size={12} /> Refresh
+          </Button>
+        </div>
+      )}
+      {embedded && (
+        <div className="d-flex justify-content-end mb-3">
+          <Button variant="outline-primary" size="sm" onClick={fetchLeaveRequests}>
+            <FaSyncAlt className="me-1" size={12} /> Refresh
+          </Button>
+        </div>
+      )}
 
       {message.text && (
         <Alert variant={message.type} dismissible onClose={() => setMessage({ type: '', text: '' })} className="mb-3 py-2 small">

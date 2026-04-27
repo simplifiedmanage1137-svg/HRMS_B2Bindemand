@@ -22,6 +22,8 @@ import AttendanceDashboard from './components/Admin/AttendanceDashboard';
 import AttendanceReports from './components/Admin/AttendanceReports';
 import SendUpdateRequest from './components/Admin/SendUpdateRequest';
 import UpdateApprovals from './components/Admin/UpdateApprovals';  // ✅ IMPORT THIS
+import SendNotice from './components/Admin/SendNotice';
+import Announcements from './components/Admin/Announcements';
 import EmployeeProfileView from './components/Admin/EmployeeProfileView';
 
 // Employee Components
@@ -35,6 +37,7 @@ import EmployeeUpdateRequests from './components/Employee/EmployeeUpdateRequests
 import EmployeeUpdateForm from './components/Employee/EmployeeUpdateForm';
 import ManagerLeaveRequests from './components/Employee/ManagerLeaveRequests';
 import ManagerShiftUpdate from './components/Employee/ManagerShiftUpdate';
+import ManagerPanel from './components/Employee/ManagerPanel';
 
 // Context
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -223,6 +226,20 @@ function AppContent() {
               </PrivateRoute>
             } />
 
+            {/* ✅ ANNOUNCEMENTS ROUTE */}
+            <Route path="/admin/announcements" element={
+              <PrivateRoute allowedRoles={['admin']}>
+                <Announcements />
+              </PrivateRoute>
+            } />
+
+            {/* ✅ SEND NOTICE / WARNING ROUTE */}
+            <Route path="/admin/send-notice" element={
+              <PrivateRoute allowedRoles={['admin']}>
+                <SendNotice />
+              </PrivateRoute>
+            } />
+
             {/* Employee Routes */}
             <Route path="/employee/dashboard" element={
               <PrivateRoute allowedRoles={['employee']}>
@@ -267,17 +284,16 @@ function AppContent() {
               </PrivateRoute>
             } />
 
-            <Route path="/manager/leave-requests" element={
+            <Route path="/manager/panel" element={
               <PrivateRoute allowedRoles={['employee']}>
-                <ManagerLeaveRequests />
+                <ManagerPanel />
               </PrivateRoute>
             } />
 
-            <Route path="/manager/shift-update" element={
-              <PrivateRoute allowedRoles={['employee']}>
-                <ManagerShiftUpdate />
-              </PrivateRoute>
-            } />
+            {/* Keep old routes as redirects for backward compatibility */}
+            <Route path="/manager/leave-requests" element={<Navigate to="/manager/panel" replace />} />
+            <Route path="/manager/shift-update" element={<Navigate to="/manager/panel" replace />} />
+            <Route path="/manager/send-notice" element={<Navigate to="/manager/panel" replace />} />
 
             {/* Redirect for any unknown routes */}
             <Route path="*" element={<Navigate to="/" replace />} />

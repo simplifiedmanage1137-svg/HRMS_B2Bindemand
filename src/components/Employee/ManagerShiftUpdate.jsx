@@ -48,7 +48,7 @@ const ShiftPicker = ({ shift, setShift, custom, setCustom, useCustom, setUseCust
   </>
 );
 
-const ManagerShiftUpdate = () => {
+const ManagerShiftUpdate = ({ embedded = false }) => {
   const [team, setTeam]       = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('single'); // 'single' | 'bulk'
@@ -158,17 +158,25 @@ const ManagerShiftUpdate = () => {
   const selectedEmp  = team.find(e => e.employee_id === singleEmpId);
 
   return (
-    <div className="p-2 p-md-3 p-lg-4">
-      {/* Header */}
-      <div className="d-flex justify-content-between align-items-center mb-4">
-        <h5 className="mb-0 d-flex align-items-center">
-          <FaClock className="me-2 text-primary" />
-          Update Team Shift Timing
-        </h5>
-        <Button variant="outline-primary" size="sm" onClick={fetchTeam}>
-          <FaSyncAlt className="me-1" size={12} /> Refresh
-        </Button>
-      </div>
+    <div className={embedded ? '' : 'p-2 p-md-3 p-lg-4'}>
+      {!embedded && (
+        <div className="d-flex justify-content-between align-items-center mb-4">
+          <h5 className="mb-0 d-flex align-items-center">
+            <FaClock className="me-2 text-primary" />
+            Update Team Shift Timing
+          </h5>
+          <Button variant="outline-primary" size="sm" onClick={fetchTeam}>
+            <FaSyncAlt className="me-1" size={12} /> Refresh
+          </Button>
+        </div>
+      )}
+      {embedded && (
+        <div className="d-flex justify-content-end mb-3">
+          <Button variant="outline-primary" size="sm" onClick={fetchTeam}>
+            <FaSyncAlt className="me-1" size={12} /> Refresh
+          </Button>
+        </div>
+      )}
 
       {message.text && (
         <Alert variant={message.type} dismissible onClose={() => setMessage({ type: '', text: '' })} className="mb-3 py-2 small">

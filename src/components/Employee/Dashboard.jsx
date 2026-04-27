@@ -30,6 +30,8 @@ import API_ENDPOINTS from '../../config/api';
 import { useNavigate } from 'react-router-dom';
 import { Bar, Doughnut } from 'react-chartjs-2';
 import { holidays, getHolidaysByRegion, isHoliday, getUpcomingHolidays } from '../../data/holidays';
+import EmployeeNotices from './EmployeeNotices';
+import AnnouncementBanner from './AnnouncementBanner';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -771,6 +773,12 @@ const EmployeeDashboard = () => {
           </Badge>
         </div>
       </div>
+
+      {/* Announcements from Admin */}
+      <AnnouncementBanner />
+
+      {/* Notices / Warnings from Admin or Manager */}
+      <EmployeeNotices />
 
       {/* Error Alert */}
       {error && (
