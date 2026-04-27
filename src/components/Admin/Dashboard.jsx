@@ -64,7 +64,6 @@ import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 import { useNavigate } from 'react-router-dom';
 import { useNotification } from '../../context/NotificationContext';
-import LeaveRequestsTest from './LeaveRequestsTest';
 // import HistoricalLateMarksUpdater from './HistoricalLateMarksUpdater';
 
 ChartJS.register(
@@ -2079,9 +2078,6 @@ const AdminDashboard = () => {
               </div>
             </Card.Body>
           </Card>
-
-          {/* Debug Component - Remove after testing */}
-          <LeaveRequestsTest />
 
           {/* Pending Leave Requests */}
           <Card className="mb-4 border-0 shadow-sm">
