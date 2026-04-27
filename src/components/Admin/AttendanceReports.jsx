@@ -219,28 +219,39 @@ const AttendanceReports = () => {
     }
   };
 
+  // Salary cycle: prev month 26th → current month 25th
+  const getSalaryCycle = (month, year) => {
+    // e.g. selected month=5 (May) → cycle: Apr 26 – May 25
+    const cycleStart = new Date(year, month - 2, 26); // prev month 26th
+    const cycleEnd   = new Date(year, month - 1, 25); // current month 25th
+    return { cycleStart, cycleEnd };
+  };
+
+  const formatCycleLabel = (month, year) => {
+    const { cycleStart, cycleEnd } = getSalaryCycle(month, year);
+    const fmt = (d) => d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    return `${fmt(cycleStart)} – ${fmt(cycleEnd)}`;
+  };
+
   const fetchMonthlyAttendance = async () => {
     try {
       setLoading(true);
       setMessage('');
 
-      const startDate = new Date(selectedYear, selectedMonth - 1, 1);
-      const endDate = new Date(selectedYear, selectedMonth, 0);
+      const { cycleStart, cycleEnd } = getSalaryCycle(selectedMonth, selectedYear);
 
       const formatLocalDate = (date) => {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
       };
 
-      const startDateStr = formatLocalDate(startDate);
-      const endDateStr = formatLocalDate(endDate);
+      const startDateStr = formatLocalDate(cycleStart);
+      const endDateStr   = formatLocalDate(cycleEnd);
 
       let url = `${API_ENDPOINTS.ATTENDANCE_REPORT}?start=${startDateStr}&end=${endDateStr}`;
-      if (department !== 'all') {
-        url += `&department=${department}`;
-      }
+      if (department !== 'all') url += `&department=${department}`;
 
       const response = await axios.get(url);
       const attendanceData = response.data.attendance || [];
@@ -250,26 +261,26 @@ const AttendanceReports = () => {
         const leaveResponse = await axios.get(API_ENDPOINTS.LEAVES);
         leaveData = leaveResponse.data.filter(leave =>
           leave.status === 'approved' &&
-          new Date(leave.end_date) >= startDate &&
-          new Date(leave.start_date) <= endDate
+          new Date(leave.end_date) >= cycleStart &&
+          new Date(leave.start_date) <= cycleEnd
         );
       } catch (error) {
         console.log('Could not fetch leave data');
       }
 
-      const monthHolidays = holidayData.filter(holiday => {
-        const holidayDate = new Date(holiday.date);
-        return holidayDate.getFullYear() === selectedYear &&
-          holidayDate.getMonth() + 1 === selectedMonth;
+      // Holidays across the cycle range (may span 2 calendar months)
+      const cycleHolidays = holidayData.filter(holiday => {
+        const hd = new Date(holiday.date);
+        return hd >= cycleStart && hd <= cycleEnd;
       });
 
       const processedData = processMonthlyAttendance(
         attendanceData,
         allEmployees,
         leaveData,
-        monthHolidays,
-        startDate,
-        endDate
+        cycleHolidays,
+        cycleStart,
+        cycleEnd
       );
 
       setMonthlyAttendance(processedData);
@@ -285,7 +296,15 @@ const AttendanceReports = () => {
   };
 
   const processMonthlyAttendance = (attendanceData, employees, leaveData, holidays, startDate, endDate) => {
-    const daysInMonth = endDate.getDate();
+    // Build total days in cycle
+    const cycleDays = [];
+    for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+      cycleDays.push(new Date(d));
+    }
+    const totalCycleDays = cycleDays.length;
+    // Update daysInMonth state to reflect cycle length
+    setDaysInMonth(totalCycleDays);
+
     const processedData = [];
 
     const attendanceMap = {};
@@ -337,19 +356,16 @@ const AttendanceReports = () => {
     const todayDay = today.getDate();
 
     filteredEmployees.forEach(employee => {
-      for (let day = 1; day <= daysInMonth; day++) {
-        const currentDate = new Date(selectedYear, selectedMonth - 1, day);
-
-        const year = currentDate.getFullYear();
+      cycleDays.forEach((currentDate, dayIndex) => {
+        const year  = currentDate.getFullYear();
         const month = String(currentDate.getMonth() + 1).padStart(2, '0');
         const dayStr = String(currentDate.getDate()).padStart(2, '0');
         const dateStr = `${year}-${month}-${dayStr}`;
+        const day = dayIndex + 1; // 1-based index within cycle
 
         const dayOfWeek = currentDate.getDay();
         const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-        const isToday = year === todayYear &&
-          currentDate.getMonth() + 1 === todayMonth &&
-          day === todayDay;
+        const isToday = currentDate.toDateString() === new Date().toDateString();
 
         const attendanceKey = `${employee.employee_id}-${dateStr}`;
         const dayAttendance = attendanceMap[attendanceKey];
@@ -492,8 +508,8 @@ const AttendanceReports = () => {
           overtime_minutes: overtimeMinutes,
           overtime_amount: overtimeAmount
         });
-      }
-    });
+      }); // end cycleDays.forEach
+    }); // end filteredEmployees.forEach
 
     return processedData;
   };
@@ -685,9 +701,11 @@ const AttendanceReports = () => {
         setTimeout(() => setMessage(''), 3000);
 
       } else {
-        const currentMonthData = months.find(m => m.value === selectedMonth);
-        const monthShort = currentMonthData?.short || 'Month';
-        const monthName = currentMonthData?.label || 'Month';
+        const { cycleStart: cStart, cycleEnd: cEnd } = getSalaryCycle(selectedMonth, selectedYear);
+        const cycleDaysExport = [];
+        for (let d = new Date(cStart); d <= cEnd; d.setDate(d.getDate() + 1)) cycleDaysExport.push(new Date(d));
+        const cycleLabel = formatCycleLabel(selectedMonth, selectedYear);
+        const monthName = months.find(m => m.value === selectedMonth)?.label || 'Month';
 
         const exportData = [];
 
@@ -728,59 +746,37 @@ const AttendanceReports = () => {
             'Leave Balance': leaveBalance,
           };
 
-          for (let day = 1; day <= daysInMonth; day++) {
-            const dayRecord = empRecords.find(r => r.day === day);
-            let status = '';
-
+          cycleDaysExport.forEach((cycleDate, idx) => {
+            const dayRecord = empRecords.find(r => r.day === idx + 1);
+            const colLabel = cycleDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+            let status = 'A';
             if (dayRecord) {
-              if (dayRecord.status === 'present' || dayRecord.status === 'working') {
-                status = 'P';
-              } else if (dayRecord.status === 'half_day') {
-                status = 'HD';
-              } else if (dayRecord.status === 'on_leave') {
-                status = 'L';
-              } else if (dayRecord.status === 'holiday') {
-                status = 'H';
-              } else if (dayRecord.status === 'weekend') {
-                status = 'W-OFF';
-              } else if (dayRecord.status === 'absent') {
-                status = 'A';
-              } else {
-                status = 'A';
-              }
+              if (dayRecord.status === 'present' || dayRecord.status === 'working') status = 'P';
+              else if (dayRecord.status === 'half_day') status = 'HD';
+              else if (dayRecord.status === 'on_leave') status = 'L';
+              else if (dayRecord.status === 'holiday') status = 'H';
+              else if (dayRecord.status === 'weekend') status = 'W-OFF';
+              else status = 'A';
             } else {
-              const currentDate = new Date(selectedYear, selectedMonth - 1, day);
-              const dayOfWeek = currentDate.getDay();
-              if (dayOfWeek === 0 || dayOfWeek === 6) {
-                status = 'W-OFF';
-              } else {
-                status = 'A';
-              }
+              if (cycleDate.getDay() === 0 || cycleDate.getDay() === 6) status = 'W-OFF';
             }
+            row[colLabel] = status;
+          });
 
-            row[`${monthShort} ${day}`] = status;
-          }
-
-          row['Days of the Month'] = daysInMonth;
-          row['Actual Present Days'] = (empStats.present + (empStats.half_day * 0.5)).toFixed(1);
+          row['Cycle Days'] = cycleDaysExport.length;
           row['Present Days'] = empStats.present || 0;
           row['Half Days'] = empStats.half_day || 0;
-          row['PL Leave'] = empStats.on_leave || 0;
+          row['Leave Days'] = empStats.on_leave || 0;
           row['Weekend Off'] = empStats.weekend || 0;
           row['Absent'] = empStats.absent || 0;
-          row['Late Coming'] = empStats.late_count || 0;
-          row['Comp-Off Earned Count'] = empStats.comp_off_count || 0;
-          row['Total Comp-Off Days'] = empStats.total_comp_off_days.toFixed(1) || '0';
+          row['Late Count'] = empStats.late_count || 0;
           row['Overtime Hours'] = empStats.overtime_hours || 0;
           row['Overtime Amount'] = empStats.overtime_amount || 0;
-          row['Avg Working Hours/Day'] = empStats.avg_hours ? formatHours(empStats.avg_hours) : '0h';
-          row['Gross Salary (Monthly)'] = salary.grossSalary;
-          row['Professional Tax (₹200)'] = salary.professionalTax;
-          row['Net Salary (After Deduction)'] = salary.netSalaryAfterDeduction;
-          row['Overtime Amount Added'] = salary.overtimeAmount > 0 ? salary.overtimeAmount : 0;
-          row['Actual Salary (After OT)'] = salary.actualSalaryAfterOT;
-          row['Net Salary To be Pay'] = salary.netSalaryToPay;
-          row['Gender'] = getGender(employee);
+          row['Avg Hours/Day'] = empStats.avg_hours ? formatHours(empStats.avg_hours) : '0h';
+          row['Gross Salary'] = salary.grossSalary;
+          row['Professional Tax'] = salary.professionalTax;
+          row['Net Salary'] = salary.netSalaryAfterDeduction;
+          row['Net Salary To Pay'] = salary.netSalaryToPay;
           row['Account Number'] = employee.account_number || 'N/A';
           row['IFSC Code'] = employee.ifsc_code || 'N/A';
           row['Bank Name'] = employee.bank_account_name || 'N/A';
@@ -789,29 +785,11 @@ const AttendanceReports = () => {
         }
 
         const ws = XLSX.utils.json_to_sheet(exportData);
-        const colWidths = [
-          { wch: 25 }, { wch: 15 }, { wch: 12 },
-        ];
-
-        for (let i = 1; i <= daysInMonth; i++) {
-          colWidths.push({ wch: 8 });
-        }
-
-        colWidths.push(
-          { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 10 }, { wch: 10 },
-          { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 15 }, { wch: 15 },
-          { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
-          { wch: 12 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 },
-          { wch: 15 }, { wch: 20 }, { wch: 15 }, { wch: 20 }
-        );
-
-        ws['!cols'] = colWidths;
-
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Monthly Attendance');
-        XLSX.writeFile(wb, `Attendance_Report_${monthName}_${selectedYear}.xlsx`);
+        XLSX.utils.book_append_sheet(wb, ws, 'Attendance');
+        XLSX.writeFile(wb, `Attendance_${monthName}_${selectedYear}_Cycle.xlsx`);
 
-        setMessage('Monthly report exported successfully!');
+        setMessage('Report exported successfully!');
         setMessageType('success');
         setTimeout(() => setMessage(''), 3000);
       }
@@ -880,7 +858,9 @@ const AttendanceReports = () => {
           <FaCalendarAlt className="me-2 text-primary" />
           Attendance Reports
         </h5>
-        <small className="text-muted">{activeView === 'daily' ? 'Daily View' : 'Monthly View'}</small>
+        <small className="text-muted">
+          {activeView === 'daily' ? 'Daily View' : `Salary Cycle: ${formatCycleLabel(selectedMonth, selectedYear)}`}
+        </small>
       </div>
 
       {message && (
@@ -1218,18 +1198,21 @@ const AttendanceReports = () => {
                         Employee
                       </th>
                       {[...Array(daysInMonth)].map((_, i) => {
-                        const day = i + 1;
-                        const isCurrent = isCurrentDate(day);
-                        const monthData = months.find(m => m.value === selectedMonth);
-                        const currentDate = new Date(selectedYear, selectedMonth - 1, day);
+                        const dayIndex = i; // 0-based
+                        const { cycleStart } = getSalaryCycle(selectedMonth, selectedYear);
+                        const currentDate = new Date(cycleStart);
+                        currentDate.setDate(currentDate.getDate() + dayIndex);
+                        const dayNum = currentDate.getDate();
+                        const monthShort = currentDate.toLocaleDateString('en-IN', { month: 'short' });
+                        const isCurrent = currentDate.toDateString() === new Date().toDateString();
                         const dayOfWeek = currentDate.getDay();
                         const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
 
                         return (
                           <th key={i} className={`fw-normal small text-center ${isCurrent ? 'bg-primary text-white' : isWeekend ? 'bg-secondary text-white' : 'bg-light'}`}
                             style={{ minWidth: '30px', top: 0, zIndex: 10 }}>
-                            {day}
-                            <div className="small fw-normal d-none d-sm-block">{monthData?.short}</div>
+                            {dayNum}
+                            <div className="small fw-normal d-none d-sm-block">{monthShort}</div>
                           </th>
                         );
                       })}
