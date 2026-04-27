@@ -50,7 +50,7 @@ const SendNotice = ({ embedded = false }) => {
 
       const [empRes, noticeRes] = await Promise.all([
         axios.get(empEndpoint),
-        axios.get(API_ENDPOINTS.NOTICES)
+        axios.get(`${API_ENDPOINTS.NOTICES}?type=sent`)  // Only fetch notices sent by this user
       ]);
 
       let emps = Array.isArray(empRes.data) ? empRes.data
@@ -144,9 +144,7 @@ const SendNotice = ({ embedded = false }) => {
   };
 
   const selectedEmp = employees.find(e => e.employee_id === selectedId);
-
-  // Sent notices (only those sent by current user)
-  const mySentNotices = sentNotices.filter(n => n.sent_by_id === user?.employeeId);
+  const mySentNotices = sentNotices; // backend already returns only sent notices
 
   return (
     <div className={embedded ? '' : 'p-2 p-md-3 p-lg-4'} style={embedded ? {} : { backgroundColor: '#f8f9fc', minHeight: '100vh' }}>

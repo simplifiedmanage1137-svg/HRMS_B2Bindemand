@@ -14,14 +14,9 @@ const EmployeeNotices = () => {
 
   const fetchNotices = async () => {
     try {
-      const res = await axios.get(API_ENDPOINTS.NOTICES);
-      // Only show notices addressed to this employee (received, not sent)
-      const received = (res.data?.notices || []).filter(n => {
-        // If sent_by_id equals current user, it's a sent notice - skip
-        // We only want notices where employee_id matches current user
-        return true; // backend already filters by employee_id for regular employees
-      });
-      setNotices(received);
+      // Only fetch notices addressed TO this employee (not ones they sent)
+      const res = await axios.get(`${API_ENDPOINTS.NOTICES}?type=received`);
+      setNotices(res.data?.notices || []);
     } catch (err) {
       console.error('Error fetching notices:', err);
     } finally {
