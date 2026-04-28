@@ -28,16 +28,18 @@ import API_ENDPOINTS from '../../config/api';
 import * as XLSX from 'xlsx';
 import { holidays as holidayData } from '../../data/holidays';
 
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+const getISTNow = () => new Date(Date.now() + IST_OFFSET_MS);
+const getISTDateString = () => getISTNow().toISOString().split('T')[0];
+
 const AttendanceReports = () => {
   const [activeView, setActiveView] = useState('daily');
   const [dailyAttendance, setDailyAttendance] = useState([]);
-  const [selectedDate, setSelectedDate] = useState(
-    new Date().toISOString().split('T')[0]
-  );
+  const [selectedDate, setSelectedDate] = useState(getISTDateString());
   const [monthlyAttendance, setMonthlyAttendance] = useState([]);
   const [allEmployees, setAllEmployees] = useState([]);
-  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(getISTNow().getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(getISTNow().getFullYear());
   const [department, setDepartment] = useState('all');
   const [departments, setDepartments] = useState([]);
   const [monthlyStats, setMonthlyStats] = useState({});
@@ -46,7 +48,7 @@ const AttendanceReports = () => {
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('danger');
 
-  const currentDate = new Date();
+  const currentDate = getISTNow();
   const currentDay = currentDate.getDate();
   const currentMonth = currentDate.getMonth() + 1;
   const currentYear = currentDate.getFullYear();
@@ -106,9 +108,28 @@ const AttendanceReports = () => {
     return parts.join(' ');
   };
 
+  const parseDateTime = (datetime) => {
+    if (!datetime) return null;
+    if (datetime instanceof Date) return datetime;
+    const value = String(datetime).trim();
+    if (!value) return null;
+
+    // Normalize space-separated datetime strings (common IST format from backend)
+    let normalized = value;
+    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value)) {
+      normalized = value.replace(' ', 'T');
+    } else if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(value)) {
+      normalized = value.replace(' ', 'T');
+    }
+
+    const parsed = new Date(normalized);
+    return isNaN(parsed.getTime()) ? null : parsed;
+  };
+
   const formatTime = (datetime) => {
-    if (!datetime) return '—';
-    return new Date(datetime).toLocaleTimeString('en-US', {
+    const parsed = parseDateTime(datetime);
+    if (!parsed) return '—';
+    return parsed.toLocaleTimeString('en-US', {
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit'
@@ -116,16 +137,18 @@ const AttendanceReports = () => {
   };
 
   const formatShortTime = (datetime) => {
-    if (!datetime) return '-';
-    return new Date(datetime).toLocaleTimeString('en-US', {
+    const parsed = parseDateTime(datetime);
+    if (!parsed) return '-';
+    return parsed.toLocaleTimeString('en-US', {
       hour: '2-digit',
       minute: '2-digit'
     });
   };
 
   const formatDate = (dateString) => {
-    if (!dateString) return '-';
-    return new Date(dateString).toLocaleDateString('en-US', {
+    const parsed = parseDateTime(dateString);
+    if (!parsed) return '-';
+    return parsed.toLocaleDateString('en-US', {
       day: '2-digit',
       month: 'short',
       year: 'numeric'
@@ -175,11 +198,32 @@ const AttendanceReports = () => {
 
       const attendanceData = response.data.attendance || [];
 
-      const processedAttendance = attendanceData.map(record => {
+      const dedupedMap = {};
+      attendanceData.forEach(record => {
+        const dateKey = record.attendance_date ? record.attendance_date.split('T')[0] : record.attendance_date;
+        const key = `${record.employee_id}-${dateKey}`;
+        const existing = dedupedMap[key];
+        if (!existing) {
+          dedupedMap[key] = record;
+          return;
+        }
+
+        const existingClockOut = existing.clock_out || existing.clock_out_ist;
+        const newClockOut = record.clock_out || record.clock_out_ist;
+        if (newClockOut && !existingClockOut) {
+          dedupedMap[key] = record;
+        } else if (newClockOut && existingClockOut) {
+          const existingMs = parseDateTime(existingClockOut)?.getTime() || 0;
+          const newMs = parseDateTime(newClockOut)?.getTime() || 0;
+          if (newMs > existingMs) dedupedMap[key] = record;
+        }
+      });
+
+      const processedAttendance = Object.values(dedupedMap).map(record => {
         if (record.clock_in && !record.clock_out) {
           const now = new Date();
-          const clockInTime = new Date(record.clock_in);
-          const currentHours = (now - clockInTime) / (1000 * 60 * 60);
+          const clockInTime = parseDateTime(record.clock_in);
+          const currentHours = clockInTime ? (now - clockInTime) / (1000 * 60 * 60) : 0;
           record.total_hours = currentHours.toFixed(2);
           record.status = 'working';
         }
@@ -628,7 +672,7 @@ const AttendanceReports = () => {
   };
 
   const goToCurrentMonth = () => {
-    const today = new Date();
+    const today = getISTNow();
     setSelectedMonth(today.getMonth() + 1);
     setSelectedYear(today.getFullYear());
   };
