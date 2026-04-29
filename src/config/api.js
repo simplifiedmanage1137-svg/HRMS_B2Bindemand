@@ -217,7 +217,8 @@ export const API_ENDPOINTS = {
     // System endpoints
     SYSTEM_STATUS: `${API_BASE_URL}/api/system/status`,
     SYSTEM_LOGS: `${API_BASE_URL}/api/system/logs`,
-    SYSTEM_CLEAR_CACHE: `${API_BASE_URL}/api/system/clear-cache`
+    SYSTEM_CLEAR_CACHE: `${API_BASE_URL}/api/system/clear-cache`,
+    
 };
 
 

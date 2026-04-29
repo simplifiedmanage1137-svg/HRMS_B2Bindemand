@@ -62,6 +62,7 @@ const Attendance = () => {
   const [hasClockedOutToday, setHasClockedOutToday] = useState(false);
   const [attendanceHistory, setAttendanceHistory] = useState([]);
   const [isSessionValid, setIsSessionValid] = useState(false);
+  const [hasIncompleteRecord, setHasIncompleteRecord] = useState(false);
   const [monthlyStats, setMonthlyStats] = useState({
     totalDays: 0,
     presentDays: 0,
@@ -390,6 +391,24 @@ const Attendance = () => {
 
       setMissedClockOuts(missedRecords);
 
+      // Check if there's any incomplete record without clock_out
+      const incompleteRecord = missedRecords.find(r => !r.has_clock_out && !r.is_regularized && !r.regularization_requested);
+
+      // If there's an incomplete record and no active session, create a virtual session
+      if (incompleteRecord && !activeSession) {
+        console.log('🔄 Creating virtual session for incomplete record:', incompleteRecord.attendance_date);
+        const virtualSession = {
+          session_id: `virtual-${incompleteRecord.id}-${Date.now()}`,
+          clock_in_time: incompleteRecord.clock_in_ist || incompleteRecord.clock_in,
+          is_virtual: true,
+          attendance_id: incompleteRecord.id,
+          attendance_date: incompleteRecord.attendance_date
+        };
+        setActiveSession(virtualSession);
+        saveSessionToStorage(virtualSession);
+        setHasClockedOutToday(false);
+      }
+
       const eligibleRecords = missedRecords.filter(
         record => record.can_regularize === true
       );
@@ -406,7 +425,8 @@ const Attendance = () => {
         eligible: eligibleRecords.length,
         pending: pendingRecords.length,
         regularized: regularizedRecords.length,
-        total: missedRecords.length
+        total: missedRecords.length,
+        hasIncomplete: !!incompleteRecord
       });
 
       if (eligibleRecords.length > 0 && !sessionStorage.getItem('eligible_regularization_shown')) {
@@ -480,6 +500,118 @@ const Attendance = () => {
       setSubmittingRequest(false);
     }
   };
+
+  // Add this function to check if there's an active session across days
+  const checkForActiveSessionAcrossDays = async () => {
+    try {
+      // First, check if there's any incomplete attendance record
+      const missedResponse = await axios.get(API_ENDPOINTS.ATTENDANCE_MISSED_CLOCKOUTS(user.employeeId));
+      const missedRecords = missedResponse.data.missed_clockouts || [];
+
+      // Find any record with clock_in but no clock_out (regardless of date)
+      const incompleteRecord = missedRecords.find(r => !r.has_clock_out && !r.is_regularized);
+
+      if (incompleteRecord) {
+        console.log('✅ Found active session from:', incompleteRecord.attendance_date);
+
+        // Create a virtual session for this incomplete record
+        const virtualSession = {
+          session_id: `virtual-${incompleteRecord.id}-${Date.now()}`,
+          clock_in_time: incompleteRecord.clock_in_ist || incompleteRecord.clock_in,
+          is_virtual: true,
+          attendance_id: incompleteRecord.id,
+          attendance_date: incompleteRecord.attendance_date
+        };
+
+        setActiveSession(virtualSession);
+        saveSessionToStorage(virtualSession);
+        setHasClockedOutToday(false);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Error checking for active session:', error);
+      return false;
+    }
+  };
+
+  // Update the initializeSession useEffect
+  useEffect(() => {
+    if (!user?.employeeId) return;
+
+    const initializeSession = async () => {
+      // FIRST: Check for any incomplete attendance (active session from any day)
+      const hasActiveSession = await checkForActiveSessionAcrossDays();
+
+      if (hasActiveSession) {
+        console.log('✅ Active session found from previous day, showing Clock Out button');
+        // Don't proceed further - we already have an active session
+        fetchTodayAttendance();
+        fetchMissedClockOuts();
+        getCurrentLocation();
+        return;
+      }
+
+      // If no active session found, then check today's attendance
+      try {
+        const response = await axios.get(API_ENDPOINTS.ATTENDANCE_TODAY(user.employeeId));
+        const todayAttendance = response.data.attendance;
+        const serverSession = response.data.active_session;
+
+        // If today has clock_in but no clock_out
+        if (todayAttendance && todayAttendance.clock_in && !todayAttendance.clock_out) {
+          setHasClockedOutToday(false);
+          const inferredSession = {
+            session_id: todayAttendance.session_id || 'temp-' + Date.now(),
+            clock_in_time: todayAttendance.clock_in,
+            is_virtual: false
+          };
+          setActiveSession(inferredSession);
+          saveSessionToStorage(inferredSession);
+        }
+        // If today has clock_out
+        else if (todayAttendance && todayAttendance.clock_out) {
+          setHasClockedOutToday(true);
+          setActiveSession(null);
+          clearSessionFromStorage();
+        }
+        // If server has active session
+        else if (serverSession && serverSession.is_active) {
+          setHasClockedOutToday(false);
+          setActiveSession(serverSession);
+          saveSessionToStorage(serverSession);
+        }
+        else {
+          setHasClockedOutToday(false);
+          setActiveSession(null);
+          clearSessionFromStorage();
+        }
+      } catch (error) {
+        console.error('Error checking today attendance:', error);
+      }
+
+      fetchTodayAttendance();
+      fetchMissedClockOuts();
+      getCurrentLocation();
+    };
+
+    initializeSession();
+
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    const handleBeforeUnload = (e) => {
+      if (activeSession) {
+        e.preventDefault();
+        e.returnValue = 'You have an active session. Please clock out.';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      clearInterval(timer);
+      if (heartbeatInterval) clearInterval(heartbeatInterval);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [user]);
 
   const recoverActiveSession = async () => {
     try {
@@ -840,9 +972,40 @@ const Attendance = () => {
     );
   };
 
+  // Update the handleClockIn function in Attendance.jsx
+
   const handleClockIn = async () => {
     setLoading(true);
+    setMessage({ type: '', text: '' });
+
     try {
+      // First, check if there's an incomplete attendance from previous day(s)
+      console.log('🔍 Checking for incomplete attendance records before clock-in...');
+      const missedResponse = await axios.get(API_ENDPOINTS.ATTENDANCE_MISSED_CLOCKOUTS(user.employeeId));
+      const missedRecords = missedResponse.data.missed_clockouts || [];
+
+      // Find records that have clock_in but no clock_out and are not regularized
+      const incompleteRecord = missedRecords.find(r => !r.has_clock_out && !r.is_regularized && !r.regularization_requested);
+
+      if (incompleteRecord) {
+        console.log('⚠️ Found incomplete attendance record:', incompleteRecord);
+        setMessage({
+          type: 'warning',
+          text: `You have an incomplete attendance record from ${incompleteRecord.attendance_date}. Please clock out first.`
+        });
+
+        // Show modal to handle previous day's clock-out
+        setShowPreviousDayClockOut({
+          show: true,
+          attendance_id: incompleteRecord.id,
+          attendance_date: incompleteRecord.attendance_date,
+          clock_in_time: incompleteRecord.clock_in_ist || incompleteRecord.clock_in
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Proceed with normal clock-in
       const response = await axios.post(API_ENDPOINTS.ATTENDANCE_CLOCK_IN, {
         employee_id: user.employeeId,
         latitude: null,
@@ -851,7 +1014,6 @@ const Attendance = () => {
       });
 
       console.log('✅ Clock-in response:', response.data);
-
       setMessage({ type: 'success', text: response.data.message });
 
       const newAttendance = {
@@ -863,24 +1025,89 @@ const Attendance = () => {
       };
       setAttendance(newAttendance);
 
-      const session = { session_id: response.data.session_id, clock_in_time: response.data.clock_in };
+      const session = {
+        session_id: response.data.session_id,
+        clock_in_time: response.data.clock_in,
+        is_virtual: false
+      };
       setActiveSession(session);
       saveSessionToStorage(session);
       setHasClockedOutToday(false);
 
       await fetchTodayAttendance();
       await fetchAttendanceHistory();
+      await fetchMissedClockOuts();
+
     } catch (error) {
-      setMessage({ type: 'danger', text: error.response?.data?.message || error.message });
+      console.error('❌ Clock-in error:', error);
+      const errorData = error.response?.data;
+
+      // Check if there's an incomplete attendance record from previous day
+      if (errorData?.has_missed_clockout && errorData?.attendance_date) {
+        setMessage({
+          type: 'warning',
+          text: errorData.message || `You have an incomplete attendance record from ${errorData.attendance_date}.`
+        });
+
+        // Show a modal to handle previous day's clock-out
+        setShowPreviousDayClockOut({
+          show: true,
+          attendance_id: errorData.attendance_id,
+          attendance_date: errorData.attendance_date,
+          clock_in_time: errorData.clock_in_time
+        });
+      } else {
+        setMessage({ type: 'danger', text: errorData?.message || error.message });
+      }
     } finally {
       setLoading(false);
     }
   };
 
+  // Add this function to Attendance.jsx
+
+  const handlePreviousDayClockOut = async () => {
+    setLoading(true);
+    try {
+      // First, get or create a session for that previous day's attendance
+      // You might need a special endpoint for this
+      const response = await axios.post(`${API_ENDPOINTS.ATTENDANCE}/clock-out-missed`, {
+        employee_id: user.employeeId,
+        attendance_id: showPreviousDayClockOut.attendance_id,
+        attendance_date: showPreviousDayClockOut.attendance_date
+      });
+
+      setMessage({ type: 'success', text: `Successfully clocked out for ${showPreviousDayClockOut.attendance_date}!` });
+      setShowPreviousDayClockOut({ show: false, attendance_id: null, attendance_date: null, clock_in_time: null });
+
+      // Refresh data
+      await fetchTodayAttendance();
+      await fetchAttendanceHistory();
+      await fetchMissedClockOuts();
+
+    } catch (error) {
+      console.error('Error clocking out for previous day:', error);
+      setMessage({ type: 'danger', text: error.response?.data?.message || 'Failed to clock out for previous day' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Add state for previous day clock-out modal
+  const [showPreviousDayClockOut, setShowPreviousDayClockOut] = useState({
+    show: false,
+    attendance_id: null,
+    attendance_date: null,
+    clock_in_time: null
+  });
+
+  // Update handleClockOut function
   const handleClockOut = async () => {
     setLoading(true);
     try {
       let sessionId = activeSession?.session_id || loadSessionFromStorage()?.session_id;
+      let isVirtualSession = activeSession?.is_virtual || false;
+      let virtualAttendanceId = activeSession?.attendance_id;
 
       if (!sessionId) {
         try {
@@ -894,19 +1121,30 @@ const Attendance = () => {
         }
       }
 
-      if (!sessionId) {
+      if (!sessionId && !isVirtualSession) {
         setMessage({ type: 'warning', text: 'No active session found. Please clock in first.' });
         setLoading(false);
         return;
       }
 
-      const response = await axios.post(API_ENDPOINTS.ATTENDANCE_CLOCK_OUT, {
-        employee_id: user.employeeId,
-        session_id: sessionId,
-        latitude: null,
-        longitude: null,
-        accuracy: null
-      });
+      let response;
+
+      // Handle virtual session (clock out for missed previous day)
+      if (isVirtualSession && virtualAttendanceId) {
+        response = await axios.post(`${API_ENDPOINTS.ATTENDANCE}/clock-out-missed`, {
+          employee_id: user.employeeId,
+          attendance_id: virtualAttendanceId,
+          attendance_date: activeSession.attendance_date
+        });
+      } else {
+        response = await axios.post(API_ENDPOINTS.ATTENDANCE_CLOCK_OUT, {
+          employee_id: user.employeeId,
+          session_id: sessionId,
+          latitude: null,
+          longitude: null,
+          accuracy: null
+        });
+      }
 
       console.log('✅ Clock-out response:', response.data);
 
@@ -923,11 +1161,10 @@ const Attendance = () => {
 
       setActiveSession(null);
       clearSessionFromStorage();
-      // Don't set hasClockedOutToday here - let fetchTodayAttendance determine it
-      // setHasClockedOutToday(true);
 
       await fetchTodayAttendance();
       await fetchAttendanceHistory();
+      await fetchMissedClockOuts();
 
     } catch (error) {
       console.error('❌ Clock-out error:', error);
@@ -966,6 +1203,28 @@ const Attendance = () => {
     return () => clearInterval(sessionCheckInterval);
   }, [activeSession, user]);
 
+  // Add this useEffect to watch for missedClockOuts changes
+  useEffect(() => {
+    // If there's an incomplete record, ensure we show Clock Out button
+    const hasIncomplete = missedClockOuts.some(r => !r.has_clock_out && !r.is_regularized);
+
+    if (hasIncomplete && !activeSession) {
+      // Create virtual session for the incomplete record
+      const incompleteRecord = missedClockOuts.find(r => !r.has_clock_out && !r.is_regularized);
+      if (incompleteRecord) {
+        const virtualSession = {
+          session_id: `virtual-${incompleteRecord.id}-${Date.now()}`,
+          clock_in_time: incompleteRecord.clock_in_ist || incompleteRecord.clock_in,
+          is_virtual: true,
+          attendance_id: incompleteRecord.id,
+          attendance_date: incompleteRecord.attendance_date
+        };
+        setActiveSession(virtualSession);
+        saveSessionToStorage(virtualSession);
+      }
+    }
+  }, [missedClockOuts]);
+
   const handleManualClockOut = async () => {
     setShowExitWarning(false);
     await handleClockOut();
@@ -1000,9 +1259,18 @@ const Attendance = () => {
     );
   };
 
+  // Update the renderClockButton function
   const renderClockButton = () => {
-    // If there's an active session, show clock out button
-    if (activeSession) {
+    // Check if there's any active session (including virtual sessions from previous day)
+    const hasAnyActiveSession = activeSession !== null;
+
+    // Also check if there's any incomplete attendance record
+    const hasIncompleteAttendance = missedClockOuts.some(r => !r.has_clock_out && !r.is_regularized);
+
+    // Show Clock Out button if:
+    // 1. There's an active session, OR
+    // 2. There's an incomplete attendance record (previous day not clocked out)
+    if (hasAnyActiveSession || hasIncompleteAttendance) {
       return (
         <Button variant="warning" size="lg" className="w-100 py-3" onClick={handleClockOut} disabled={loading}>
           {loading ? (
@@ -1019,7 +1287,7 @@ const Attendance = () => {
         </Button>
       );
     }
-    
+
     // If clocked out today, show completed button
     if (hasClockedOutToday) {
       return (
@@ -1029,7 +1297,7 @@ const Attendance = () => {
         </Button>
       );
     }
-    
+
     // Default: show clock in button
     return (
       <Button variant="success" size="lg" className="w-100 py-3" onClick={handleClockIn} disabled={loading}>
@@ -1049,16 +1317,48 @@ const Attendance = () => {
   };
 
   // Session validation and cleanup on mount
+  // Update the initializeSession function in Attendance.jsx
   useEffect(() => {
     if (!user?.employeeId) return;
 
     const initializeSession = async () => {
       const stored = loadSessionFromStorage();
 
-      // Also check today's attendance to determine if we should have active session
       try {
         const response = await axios.get(API_ENDPOINTS.ATTENDANCE_TODAY(user.employeeId));
         const todayAttendance = response.data.attendance;
+        const serverSession = response.data.active_session;
+
+        console.log('🔄 Initializing session - Today attendance:', todayAttendance);
+        console.log('🔄 Server session:', serverSession);
+        console.log('🔄 Stored session:', stored);
+
+        // CRITICAL: Check if there's any attendance record without clock_out (could be from previous day)
+        // First, check if there's any incomplete attendance (clock_in without clock_out) from ANY day
+        const { data: incompleteRecords } = await axios.get(API_ENDPOINTS.ATTENDANCE_MISSED_CLOCKOUTS(user.employeeId));
+        const hasIncompleteRecord = incompleteRecords && incompleteRecords.missed_clockouts &&
+          incompleteRecords.missed_clockouts.length > 0;
+
+        // If there's an incomplete record (including from previous day), we should show clock out
+        if (hasIncompleteRecord && incompleteRecords.missed_clockouts[0] && !incompleteRecords.missed_clockouts[0].has_clock_out) {
+          const missedRecord = incompleteRecords.missed_clockouts[0];
+          console.log('⚠️ Found incomplete record from:', missedRecord.attendance_date);
+
+          // Create a virtual session for this missed record so user can clock out
+          if (!activeSession) {
+            const virtualSession = {
+              session_id: `virtual-${missedRecord.id}-${Date.now()}`,
+              clock_in_time: missedRecord.clock_in,
+              is_virtual: true,
+              attendance_id: missedRecord.id,
+              attendance_date: missedRecord.attendance_date
+            };
+            setActiveSession(virtualSession);
+            saveSessionToStorage(virtualSession);
+            setHasClockedOutToday(false);
+          }
+          return;
+        }
 
         // If today has clock_out, ensure no active session
         if (todayAttendance && todayAttendance.clock_out) {
@@ -1067,8 +1367,9 @@ const Attendance = () => {
             setActiveSession(null);
             clearSessionFromStorage();
           }
-        } else if (todayAttendance && todayAttendance.clock_in && !todayAttendance.clock_out) {
-          // If today has clock_in but no clock_out, ensure we have an active session
+        }
+        // If today has clock_in but no clock_out, ensure we have an active session
+        else if (todayAttendance && todayAttendance.clock_in && !todayAttendance.clock_out) {
           setHasClockedOutToday(false);
           if (!activeSession) {
             const inferredSession = {
@@ -1078,22 +1379,34 @@ const Attendance = () => {
             setActiveSession(inferredSession);
             saveSessionToStorage(inferredSession);
           }
-        } else {
+        }
+        // If there's a server session (could be from previous day that's still active)
+        else if (serverSession && serverSession.is_active) {
+          setHasClockedOutToday(false);
+          if (!activeSession) {
+            setActiveSession(serverSession);
+            saveSessionToStorage(serverSession);
+          }
+        }
+        // Check for cross-day session: if there's an active session stored but no attendance for today
+        else if (stored && stored.session_id && (!todayAttendance || !todayAttendance.clock_in)) {
+          // This could be a session from yesterday that's still active
+          setHasClockedOutToday(false);
+          if (!activeSession) {
+            setActiveSession(stored);
+          }
+        }
+        else {
           // No attendance data for today, reset session state
           setHasClockedOutToday(false);
-          if (activeSession) {
+          if (activeSession && !activeSession.is_virtual) {
             setActiveSession(null);
             clearSessionFromStorage();
           }
         }
       } catch (error) {
         console.error('Error checking today attendance:', error);
-        // On error, reset to safe state
         setHasClockedOutToday(false);
-        if (activeSession) {
-          setActiveSession(null);
-          clearSessionFromStorage();
-        }
       }
 
       fetchTodayAttendance();
@@ -1577,6 +1890,29 @@ const Attendance = () => {
         <Modal.Header closeButton className="bg-warning"><Modal.Title className="h6">⚠️ Active Session Detected</Modal.Title></Modal.Header>
         <Modal.Body className="p-3"><p className="small">You have an active session. Would you like to clock out before leaving?</p><p className="text-muted small">If you don't clock out, your attendance will not be recorded properly.</p></Modal.Body>
         <Modal.Footer className="py-2"><Button variant="secondary" size="sm" onClick={() => setShowExitWarning(false)}>Cancel</Button><Button variant="warning" size="sm" onClick={handleManualClockOut}><FaSignOutAlt className="me-2" /> Clock Out Now</Button></Modal.Footer>
+      </Modal>
+
+      <Modal show={showPreviousDayClockOut.show} onHide={() => setShowPreviousDayClockOut({ show: false, attendance_id: null, attendance_date: null, clock_in_time: null })} centered>
+        <Modal.Header closeButton className="bg-warning">
+          <Modal.Title className="h6">⚠️ Incomplete Attendance Detected</Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="p-4">
+          <p>You have an incomplete attendance record from <strong>{showPreviousDayClockOut.attendance_date}</strong>.</p>
+          <p className="text-muted small">Clock In Time: {showPreviousDayClockOut.clock_in_time ? formatTimeIST(showPreviousDayClockOut.clock_in_time) : 'Unknown'}</p>
+          <p>Would you like to clock out for that day now?</p>
+          <Alert variant="warning" className="small">
+            <FaExclamationTriangle className="me-2" />
+            If you don't clock out, your attendance for {showPreviousDayClockOut.attendance_date} will remain incomplete.
+          </Alert>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" size="sm" onClick={() => setShowPreviousDayClockOut({ show: false, attendance_id: null, attendance_date: null, clock_in_time: null })}>
+            Cancel
+          </Button>
+          <Button variant="warning" size="sm" onClick={handlePreviousDayClockOut}>
+            <FaClock className="me-2" /> Clock Out for {showPreviousDayClockOut.attendance_date}
+          </Button>
+        </Modal.Footer>
       </Modal>
     </div>
   );

@@ -76,7 +76,7 @@ const AttendanceReports = () => {
   const PROFESSIONAL_TAX = 200;
   const OVERTIME_RATE = 150;
 
-  // Format decimal hours to "Xh Ym" format
+  // Replace the formatHours function with this corrected version
   const formatHours = (decimalHours) => {
     if (!decimalHours || decimalHours <= 0) return '-';
 
@@ -84,11 +84,35 @@ const AttendanceReports = () => {
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
 
-    if (minutes === 0) {
-      return `${hours}h`;
-    }
+    if (hours === 0) return `${minutes}m`;
+    if (minutes === 0) return `${hours}h`;
     return `${hours}h ${minutes}m`;
   };
+
+  // Add to your frontend components
+const isFullDay = (clockIn, clockOut, shiftHours = 9) => {
+  if (!clockIn || !clockOut) return false;
+  
+  const clockInTime = new Date(clockIn);
+  const clockOutTime = new Date(clockOut);
+  const diffMs = clockOutTime - clockInTime;
+  const diffMinutes = diffMs / (1000 * 60);
+  const expectedMinutes = shiftHours * 60;
+  
+  return diffMinutes >= expectedMinutes;
+};
+
+const isHalfDay = (clockIn, clockOut, shiftHours = 9) => {
+  if (!clockIn || !clockOut) return false;
+  
+  const clockInTime = new Date(clockIn);
+  const clockOutTime = new Date(clockOut);
+  const diffMs = clockOutTime - clockInTime;
+  const diffMinutes = diffMs / (1000 * 60);
+  const expectedMinutes = shiftHours * 60;
+  
+  return diffMinutes >= 240 && diffMinutes < expectedMinutes; // 4 hours to 9 hours
+};
 
 
   const formatLateDisplay = (lateMinutes) => {
@@ -297,7 +321,7 @@ const AttendanceReports = () => {
       };
 
       const startDateStr = formatLocalDate(cycleStart);
-      const endDateStr   = formatLocalDate(cycleEnd);
+      const endDateStr = formatLocalDate(cycleEnd);
 
       let url = `${API_ENDPOINTS.ATTENDANCE_REPORT}?start=${startDateStr}&end=${endDateStr}`;
       if (department !== 'all') url += `&department=${department}`;
@@ -406,7 +430,7 @@ const AttendanceReports = () => {
 
     filteredEmployees.forEach(employee => {
       cycleDays.forEach((currentDate, dayIndex) => {
-        const year  = currentDate.getFullYear();
+        const year = currentDate.getFullYear();
         const month = String(currentDate.getMonth() + 1).padStart(2, '0');
         const dayStr = String(currentDate.getDate()).padStart(2, '0');
         const dateStr = `${year}-${month}-${dayStr}`;
