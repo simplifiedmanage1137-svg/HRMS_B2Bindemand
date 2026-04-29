@@ -3,11 +3,13 @@ import React, { useState } from 'react';
 import { FaCalendarAlt, FaClock, FaExclamationTriangle } from 'react-icons/fa';
 import ManagerLeaveRequests from './ManagerLeaveRequests';
 import ManagerShiftUpdate from './ManagerShiftUpdate';
+import ManagerRegularizationRequests from './ManagerRegularizationRequests';
 import SendNotice from '../Admin/SendNotice';
 
 const TABS = [
   { key: 'leaves', label: 'Team Leaves', icon: <FaCalendarAlt size={13} /> },
   { key: 'shifts', label: 'Team Shifts', icon: <FaClock size={13} /> },
+  { key: 'regularization', label: 'Regularizations', icon: <FaClock size={13} /> },
   { key: 'notice', label: 'Send Notice', icon: <FaExclamationTriangle size={13} /> },
 ];
 
@@ -52,6 +54,7 @@ const ManagerPanel = () => {
       <div>
         {activeTab === 'leaves' && <ManagerLeaveRequests embedded />}
         {activeTab === 'shifts' && <ManagerShiftUpdate embedded />}
+        {activeTab === 'regularization' && <ManagerRegularizationRequests embedded />}
         {activeTab === 'notice' && <SendNotice embedded />}
       </div>
     </div>
