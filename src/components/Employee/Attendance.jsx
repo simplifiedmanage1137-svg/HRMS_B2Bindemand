@@ -347,8 +347,11 @@ const Attendance = () => {
         }
 
         setAttendance(attendanceData);
+        // Set hasClockedOutToday based on whether there's a clock_out in the attendance data
         if (attendanceData.clock_out) {
           setHasClockedOutToday(true);
+        } else {
+          setHasClockedOutToday(false);
         }
       }
 
@@ -364,9 +367,11 @@ const Attendance = () => {
         setActiveSession(inferredSession);
         saveSessionToStorage(inferredSession);
         setHasClockedOutToday(false);
-      } else {
+      } else if (!serverSession && !attendanceData) {
+        // Only clear session if there's truly no active session and no attendance data
         setActiveSession(null);
         clearSessionFromStorage();
+        setHasClockedOutToday(false);
       }
 
       return attendanceData;
@@ -918,7 +923,8 @@ const Attendance = () => {
 
       setActiveSession(null);
       clearSessionFromStorage();
-      setHasClockedOutToday(true);
+      // Don't set hasClockedOutToday here - let fetchTodayAttendance determine it
+      // setHasClockedOutToday(true);
 
       await fetchTodayAttendance();
       await fetchAttendanceHistory();
@@ -995,14 +1001,7 @@ const Attendance = () => {
   };
 
   const renderClockButton = () => {
-    if (hasClockedOutToday && !activeSession) {
-      return (
-        <Button variant="secondary" size="lg" className="w-100 py-2" disabled>
-          <FaSignOutAlt className="me-2" />
-          Clock Out (Completed)
-        </Button>
-      );
-    }
+    // If there's an active session, show clock out button
     if (activeSession) {
       return (
         <Button variant="warning" size="lg" className="w-100 py-3" onClick={handleClockOut} disabled={loading}>
@@ -1020,6 +1019,18 @@ const Attendance = () => {
         </Button>
       );
     }
+    
+    // If clocked out today, show completed button
+    if (hasClockedOutToday) {
+      return (
+        <Button variant="secondary" size="lg" className="w-100 py-2" disabled>
+          <FaSignOutAlt className="me-2" />
+          Clock Out (Completed)
+        </Button>
+      );
+    }
+    
+    // Default: show clock in button
     return (
       <Button variant="success" size="lg" className="w-100 py-3" onClick={handleClockIn} disabled={loading}>
         {loading ? (
@@ -1056,9 +1067,33 @@ const Attendance = () => {
             setActiveSession(null);
             clearSessionFromStorage();
           }
+        } else if (todayAttendance && todayAttendance.clock_in && !todayAttendance.clock_out) {
+          // If today has clock_in but no clock_out, ensure we have an active session
+          setHasClockedOutToday(false);
+          if (!activeSession) {
+            const inferredSession = {
+              session_id: todayAttendance.session_id || 'temp-' + Date.now(),
+              clock_in_time: todayAttendance.clock_in
+            };
+            setActiveSession(inferredSession);
+            saveSessionToStorage(inferredSession);
+          }
+        } else {
+          // No attendance data for today, reset session state
+          setHasClockedOutToday(false);
+          if (activeSession) {
+            setActiveSession(null);
+            clearSessionFromStorage();
+          }
         }
       } catch (error) {
         console.error('Error checking today attendance:', error);
+        // On error, reset to safe state
+        setHasClockedOutToday(false);
+        if (activeSession) {
+          setActiveSession(null);
+          clearSessionFromStorage();
+        }
       }
 
       fetchTodayAttendance();

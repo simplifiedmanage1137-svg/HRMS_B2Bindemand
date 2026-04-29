@@ -462,9 +462,11 @@ const AttendanceReports = () => {
           lateMinutes = dayAttendance.late_minutes || 0;
           compOffAwarded = dayAttendance.comp_off_awarded || false;
           compOffDays = dayAttendance.comp_off_days || 0;
-          overtimeHours = dayAttendance.overtime_hours || 0;
-          overtimeMinutes = dayAttendance.overtime_minutes || 0;
-          overtimeAmount = dayAttendance.overtime_amount || 0;
+
+          const computedOvertimeHours = Math.max(0, Math.floor(totalHours - 9));
+          overtimeHours = dayAttendance.overtime_hours != null ? dayAttendance.overtime_hours : computedOvertimeHours;
+          overtimeAmount = dayAttendance.overtime_amount != null ? dayAttendance.overtime_amount : (overtimeHours * OVERTIME_RATE);
+          overtimeMinutes = dayAttendance.overtime_minutes != null ? dayAttendance.overtime_minutes : (overtimeHours * 60);
 
           if (isToday && clockIn && !clockOut) {
             status = 'working';
