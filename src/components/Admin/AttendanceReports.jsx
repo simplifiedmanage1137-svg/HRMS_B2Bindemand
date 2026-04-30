@@ -111,7 +111,7 @@ const AttendanceReports = () => {
     const diffMinutes = diffMs / (1000 * 60);
     const expectedMinutes = shiftHours * 60;
 
-    return diffMinutes >= 240 && diffMinutes < expectedMinutes; // 4 hours to 9 hours
+    return diffMinutes >= 300 && diffMinutes < expectedMinutes; // 5 hours to expected work hours
   };
 
 
@@ -254,6 +254,17 @@ const AttendanceReports = () => {
 
         record.late_minutes = Number(record.late_minutes) || 0;
         record.is_late = record.late_minutes > 0;
+
+        if (record.clock_in && record.clock_out) {
+          const totalMinutes = Number(record.total_minutes) || Math.round((parseDateTime(record.clock_out) - parseDateTime(record.clock_in)) / (1000 * 60));
+          if (totalMinutes >= 540) {
+            record.status = 'present';
+          } else if (totalMinutes >= 300) {
+            record.status = 'half_day';
+          } else {
+            record.status = 'absent';
+          }
+        }
 
         // FIXED: Always calculate late_display if late_minutes exists
         if (record.late_minutes > 0) {
@@ -543,12 +554,7 @@ const AttendanceReports = () => {
               status = 'present';
               statusBadge = 'success';
               statusIcon = '✓';
-            } else if (totalMinutes >= 240) {
-              status = 'half_day';
-              statusBadge = 'warning';
-              statusIcon = '½';
-            } else {
-              status = 'absent';
+              } else if (totalMinutes >= 300) {
               statusBadge = 'danger';
               statusIcon = '✗';
             }
