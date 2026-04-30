@@ -90,29 +90,29 @@ const AttendanceReports = () => {
   };
 
   // Add to your frontend components
-const isFullDay = (clockIn, clockOut, shiftHours = 9) => {
-  if (!clockIn || !clockOut) return false;
-  
-  const clockInTime = new Date(clockIn);
-  const clockOutTime = new Date(clockOut);
-  const diffMs = clockOutTime - clockInTime;
-  const diffMinutes = diffMs / (1000 * 60);
-  const expectedMinutes = shiftHours * 60;
-  
-  return diffMinutes >= expectedMinutes;
-};
+  const isFullDay = (clockIn, clockOut, shiftHours = 9) => {
+    if (!clockIn || !clockOut) return false;
 
-const isHalfDay = (clockIn, clockOut, shiftHours = 9) => {
-  if (!clockIn || !clockOut) return false;
-  
-  const clockInTime = new Date(clockIn);
-  const clockOutTime = new Date(clockOut);
-  const diffMs = clockOutTime - clockInTime;
-  const diffMinutes = diffMs / (1000 * 60);
-  const expectedMinutes = shiftHours * 60;
-  
-  return diffMinutes >= 240 && diffMinutes < expectedMinutes; // 4 hours to 9 hours
-};
+    const clockInTime = new Date(clockIn);
+    const clockOutTime = new Date(clockOut);
+    const diffMs = clockOutTime - clockInTime;
+    const diffMinutes = diffMs / (1000 * 60);
+    const expectedMinutes = shiftHours * 60;
+
+    return diffMinutes >= expectedMinutes;
+  };
+
+  const isHalfDay = (clockIn, clockOut, shiftHours = 9) => {
+    if (!clockIn || !clockOut) return false;
+
+    const clockInTime = new Date(clockIn);
+    const clockOutTime = new Date(clockOut);
+    const diffMs = clockOutTime - clockInTime;
+    const diffMinutes = diffMs / (1000 * 60);
+    const expectedMinutes = shiftHours * 60;
+
+    return diffMinutes >= 240 && diffMinutes < expectedMinutes; // 4 hours to 9 hours
+  };
 
 
   const formatLateDisplay = (lateMinutes) => {
@@ -511,47 +511,86 @@ const isHalfDay = (clockIn, clockOut, shiftHours = 9) => {
             const clockInTime = new Date(clockIn);
             totalHours = (now - clockInTime) / (1000 * 60 * 60);
           }
-          else if (clockIn && clockOut) {
-            if (totalHours >= 8) {
+          else // In processMonthlyAttendance function, update the section where totalHours is calculated
+
+            if (clockIn && clockOut) {
+              // Parse times properly
+              let clockInTime, clockOutTime;
+
+              // Handle IST format (YYYY-MM-DD HH:MM:SS)
+              if (typeof clockIn === 'string' && clockIn.includes(' ')) {
+                const [inDatePart, inTimePart] = clockIn.split(' ');
+                const [inYear, inMonth, inDay] = inDatePart.split('-');
+                const [inHour, inMinute, inSecond] = inTimePart.split(':');
+                clockInTime = new Date(inYear, inMonth - 1, inDay, inHour, inMinute, inSecond || 0);
+              } else {
+                clockInTime = new Date(clockIn);
+              }
+
+              if (typeof clockOut === 'string' && clockOut.includes(' ')) {
+                const [outDatePart, outTimePart] = clockOut.split(' ');
+                const [outYear, outMonth, outDay] = outDatePart.split('-');
+                const [outHour, outMinute, outSecond] = outTimePart.split(':');
+                clockOutTime = new Date(outYear, outMonth - 1, outDay, outHour, outMinute, outSecond || 0);
+              } else {
+                clockOutTime = new Date(clockOut);
+              }
+
+              // If clock_out is next day, add 24 hours
+              if (clockOutTime < clockInTime) {
+                clockOutTime.setDate(clockOutTime.getDate() + 1);
+              }
+
+              const diffMs = clockOutTime - clockInTime;
+              const totalMinutes = Math.round(diffMs / (1000 * 60));
+              const totalHoursValue = totalMinutes / 60;
+
+              // Round to 2 decimal places
+              totalHours = Math.round(totalHoursValue * 100) / 100;
+
+              // Format display
+              const hours = Math.floor(totalMinutes / 60);
+              const minutes = totalMinutes % 60;
+              totalHoursDisplay = `${hours}h ${minutes}m`;
+
+              // Check if employee worked >= 9 hours
+              const isFullDay = totalHours >= 9;
+              const isHalfDay = totalHours >= 4 && totalHours < 9;
+
+              if (isFullDay) {
+                status = 'present';
+                statusBadge = 'success';
+                statusIcon = '✓';
+              } else if (isHalfDay) {
+                status = 'half_day';
+                statusBadge = 'warning';
+                statusIcon = '½';
+              } else {
+                status = 'absent';
+                statusBadge = 'danger';
+                statusIcon = '✗';
+              }
+
+              tooltip = `In: ${formatShortTime(clockIn)} | Out: ${formatShortTime(clockOut)} | Hrs: ${totalHoursDisplay}`;
+              if (lateMinutes > 0) {
+                tooltip += ` | Late: ${formatLateDisplay(lateMinutes)}`;
+              }
+            }
+            else if (clockIn) {
               status = 'present';
               statusBadge = 'success';
               statusIcon = '✓';
-            } else if (totalHours >= 4) {
-              status = 'half_day';
-              statusBadge = 'warning';
-              statusIcon = '½';
-            } else {
-              status = 'absent';
-              statusBadge = 'danger';
-              statusIcon = '✗';
+              tooltip = `In: ${formatShortTime(clockIn)} | No clock out`;
+              if (lateMinutes > 0) {
+                tooltip += ` | Late: ${formatLateDisplay(lateMinutes)}`;
+              }
+              if (compOffAwarded) {
+                tooltip += ` | 🎉 Comp-Off Earned: ${compOffDays} day`;
+              }
+              if (overtimeHours > 0) {
+                tooltip += ` | Overtime: ${overtimeHours}h (₹${overtimeAmount})`;
+              }
             }
-
-            tooltip = `In: ${formatShortTime(clockIn)} | Out: ${formatShortTime(clockOut)} | Hrs: ${formatHours(totalHours)}`;
-            if (lateMinutes > 0) {
-              tooltip += ` | Late: ${formatLateDisplay(lateMinutes)}`;
-            }
-            if (compOffAwarded) {
-              tooltip += ` | 🎉 Comp-Off Earned: ${compOffDays} day`;
-            }
-            if (overtimeHours > 0) {
-              tooltip += ` | Overtime: ${overtimeHours}h (₹${overtimeAmount})`;
-            }
-          }
-          else if (clockIn) {
-            status = 'present';
-            statusBadge = 'success';
-            statusIcon = '✓';
-            tooltip = `In: ${formatShortTime(clockIn)} | No clock out`;
-            if (lateMinutes > 0) {
-              tooltip += ` | Late: ${formatLateDisplay(lateMinutes)}`;
-            }
-            if (compOffAwarded) {
-              tooltip += ` | 🎉 Comp-Off Earned: ${compOffDays} day`;
-            }
-            if (overtimeHours > 0) {
-              tooltip += ` | Overtime: ${overtimeHours}h (₹${overtimeAmount})`;
-            }
-          }
         }
 
         processedData.push({
@@ -617,35 +656,67 @@ const isHalfDay = (clockIn, clockOut, shiftHours = 9) => {
         };
       }
 
-      if (record.status === 'present') perEmployee[record.employee_id].present++;
-      else if (record.status === 'half_day') perEmployee[record.employee_id].half_day++;
-      else if (record.status === 'absent') perEmployee[record.employee_id].absent++;
-      else if (record.status === 'on_leave') {
+      // Status counting logic
+      if (record.status === 'present') {
+        perEmployee[record.employee_id].present++;
+      } else if (record.status === 'half_day') {
+        perEmployee[record.employee_id].half_day++;
+      } else if (record.status === 'absent') {
+        perEmployee[record.employee_id].absent++;
+      } else if (record.status === 'on_leave') {
         perEmployee[record.employee_id].on_leave++;
         if (record.leave_type) {
           perEmployee[record.employee_id].leave_types.push(record.leave_type);
         }
+      } else if (record.status === 'working') {
+        perEmployee[record.employee_id].working++;
+      } else if (record.status === 'holiday') {
+        perEmployee[record.employee_id].holiday++;
+      } else if (record.status === 'weekend') {
+        perEmployee[record.employee_id].weekend++;
       }
-      else if (record.status === 'working') perEmployee[record.employee_id].working++;
-      else if (record.status === 'holiday') perEmployee[record.employee_id].holiday++;
-      else if (record.status === 'weekend') perEmployee[record.employee_id].weekend++;
 
+      // ✅ IMPORTANT: Add hours for present, half_day, and working days
       if (record.status === 'present' || record.status === 'working' || record.status === 'half_day') {
         perEmployee[record.employee_id].working_days_count++;
-        const hours = parseFloat(record.total_hours || 0);
+
+        // Parse total_hours - handle both number and string
+        let hours = 0;
+        if (record.total_hours) {
+          hours = parseFloat(record.total_hours);
+        } else if (record.total_hours_display) {
+          // Parse from "Xh Ym" format
+          const match = record.total_hours_display.match(/(\d+)h\s*(\d*)m?/);
+          if (match) {
+            hours = parseInt(match[1]) + (parseInt(match[2] || 0) / 60);
+          }
+        } else if (record.clock_in && record.clock_out) {
+          // Calculate manually if needed
+          const clockInTime = new Date(record.clock_in);
+          let clockOutTime = new Date(record.clock_out);
+          if (clockOutTime < clockInTime) {
+            clockOutTime.setDate(clockOutTime.getDate() + 1);
+          }
+          const diffMinutes = (clockOutTime - clockInTime) / (1000 * 60);
+          hours = diffMinutes / 60;
+        }
+
         perEmployee[record.employee_id].total_hours += hours;
       }
 
+      // Late counting
       if (record.is_late) {
         perEmployee[record.employee_id].late_count++;
         perEmployee[record.employee_id].total_late_minutes += record.late_minutes || 0;
       }
 
+      // Comp-off counting
       if (record.comp_off_awarded) {
         perEmployee[record.employee_id].comp_off_count++;
         perEmployee[record.employee_id].total_comp_off_days += record.comp_off_days || 0;
       }
 
+      // Overtime counting
       if (record.overtime_hours > 0) {
         perEmployee[record.employee_id].overtime_hours += record.overtime_hours;
         perEmployee[record.employee_id].overtime_minutes += record.overtime_minutes || 0;
@@ -653,6 +724,7 @@ const isHalfDay = (clockIn, clockOut, shiftHours = 9) => {
       }
     });
 
+    // Calculate averages
     Object.keys(perEmployee).forEach(empId => {
       const emp = perEmployee[empId];
       if (emp.working_days_count > 0) {
