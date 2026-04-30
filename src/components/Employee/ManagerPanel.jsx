@@ -1,17 +1,19 @@
 // src/components/Employee/ManagerPanel.jsx
 import React, { useState } from 'react';
-import { FaCalendarAlt, FaClock, FaExclamationTriangle, FaChartBar } from 'react-icons/fa';
+import { FaCalendarAlt, FaClock, FaExclamationTriangle, FaChartBar, FaStar } from 'react-icons/fa';
 import ManagerLeaveRequests from './ManagerLeaveRequests';
 import ManagerShiftUpdate from './ManagerShiftUpdate';
 import ManagerRegularizationRequests from './ManagerRegularizationRequests';
 import SendNotice from '../Admin/SendNotice';
 import TeamAttendanceReport from './TeamAttendanceReport';
+import TeamRating from './TeamRating';
 
 const TABS = [
   { key: 'leaves', label: 'Team Leaves', icon: <FaCalendarAlt size={13} /> },
   { key: 'attendance', label: 'Team Attendance', icon: <FaChartBar size={13} /> },
   { key: 'shifts', label: 'Team Shifts', icon: <FaClock size={13} /> },
   { key: 'regularization', label: 'Regularizations', icon: <FaClock size={13} /> },
+  { key: 'rating', label: 'Team Rating', icon: <FaStar size={13} /> },
   { key: 'notice', label: 'Send Notice', icon: <FaExclamationTriangle size={13} /> },
 ];
 
@@ -56,6 +58,7 @@ const ManagerPanel = () => {
         {activeTab === 'attendance' && <TeamAttendanceReport />}
         {activeTab === 'shifts' && <ManagerShiftUpdate embedded />}
         {activeTab === 'regularization' && <ManagerRegularizationRequests embedded />}
+        {activeTab === 'rating' && <TeamRating />}
         {activeTab === 'notice' && <SendNotice embedded />}
       </div>
     </div>

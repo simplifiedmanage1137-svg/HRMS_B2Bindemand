@@ -64,6 +64,7 @@ import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 import { useNavigate } from 'react-router-dom';
 import { useNotification } from '../../context/NotificationContext';
+import AdminRatings from './AdminRatings';
 // import HistoricalLateMarksUpdater from './HistoricalLateMarksUpdater';
 
 ChartJS.register(
@@ -96,6 +97,13 @@ const RegularizationRequests = ({ onRequestCountChange }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
   const { addNotification } = useNotification();
+  const [activeAdminTab, setActiveAdminTab] = useState('overview');
+  const [managerRatings, setManagerRatings] = useState([]);
+const [adminRatings, setAdminRatings] = useState([]);
+const [managerAverage, setManagerAverage] = useState(null);
+const [adminAverage, setAdminAverage] = useState(null);
+const [showRatingHistory, setShowRatingHistory] = useState(false);
+const [activeRatingTab, setActiveRatingTab] = useState('manager');
 
   const fetchRequests = async () => {
     try {
@@ -118,6 +126,21 @@ const RegularizationRequests = ({ onRequestCountChange }) => {
       setLoading(false);
     }
   };
+
+  const fetchEmployeeRatings = async () => {
+  try {
+    const response = await axios.get(`${API_ENDPOINTS.RATINGS}/employee/${user.employeeId}/history`);
+    if (response.data.success) {
+      setManagerRatings(response.data.manager_ratings || []);
+      setAdminRatings(response.data.admin_ratings || []);
+      setManagerAverage(response.data.manager_average);
+      setAdminAverage(response.data.admin_average);
+    }
+  } catch (error) {
+    console.error('Error fetching ratings:', error);
+  }
+};
+
 
   useEffect(() => {
     fetchRequests();
@@ -1203,7 +1226,7 @@ const AdminDashboard = () => {
       console.log('🔄 Fetching pending leave requests for admin dashboard...');
       const leavesRes = await axios.get(`${API_ENDPOINTS.LEAVES}?all=true`);
       console.log('📊 Leave requests response:', leavesRes.data);
-      
+
       // Handle both array response and object with data property
       let allLeaves = [];
       if (Array.isArray(leavesRes.data)) {
@@ -1213,11 +1236,11 @@ const AdminDashboard = () => {
       } else if (leavesRes.data && Array.isArray(leavesRes.data.leaves)) {
         allLeaves = leavesRes.data.leaves;
       }
-      
+
       const pendingLeaves = allLeaves.filter(leave => leave.status === 'pending');
-      
+
       console.log(`✅ Found ${allLeaves.length} total leaves, ${pendingLeaves.length} pending`);
-      
+
       setLeaveRequests(pendingLeaves);
       setFilteredLeaveRequests(pendingLeaves);
     } catch (error) {
@@ -1479,28 +1502,49 @@ const AdminDashboard = () => {
         <ButtonGroup>
           <Button
             variant={activeTab === 'overview' ? 'primary' : 'outline-secondary'}
-            onClick={() => setActiveTab('overview')}
+            onClick={() => {
+        setActiveTab('overview');
+        setActiveAdminTab('overview'); // Reset admin tab when switching to overview
+      }}
           >
             <FaChartBar className="me-2" />
             Overview
           </Button>
           <Button
+            variant={activeAdminTab === 'ratings' ? 'primary' : 'outline-secondary'}
+            onClick={() => {
+        setActiveAdminTab('ratings');
+        setActiveTab('ratings'); // Set activeTab as well
+      }}
+          >
+            <FaStar className="me-2" /> Employee Ratings
+          </Button>
+          <Button
             variant={activeTab === 'birthdays' ? 'info' : 'outline-secondary'}
-            onClick={() => setActiveTab('birthdays')}
+            onClick={() => {
+        setActiveTab('birthdays');
+        setActiveAdminTab('overview'); // Reset admin tab
+      }}
           >
             <FaBirthdayCake className="me-2" />
             Birthdays ({allBirthdays.length})
           </Button>
           <Button
             variant={activeTab === 'anniversaries' ? 'warning' : 'outline-secondary'}
-            onClick={() => setActiveTab('anniversaries')}
+            onClick={() => {
+        setActiveTab('anniversaries');
+        setActiveAdminTab('overview'); // Reset admin tab
+      }}
           >
             <FaTrophy className="me-2" />
             Work Anniversaries ({allAnniversaries.length})
           </Button>
           <Button
             variant={activeTab === 'regularization' ? 'warning' : 'outline-secondary'}
-            onClick={() => setActiveTab('regularization')}
+             onClick={() => {
+        setActiveTab('regularization');
+        setActiveAdminTab('overview'); // Reset admin tab
+      }}
           >
             <FaRegClock className="me-2" />
             Regularization Requests
@@ -1512,6 +1556,8 @@ const AdminDashboard = () => {
           </Button>
         </ButtonGroup>
       </div>
+
+      {activeAdminTab === 'ratings' && <AdminRatings />}
 
       {activeTab === 'regularization' ? (
         <RegularizationRequests
@@ -2116,18 +2162,18 @@ const AdminDashboard = () => {
                   {leaveSearchTerm && <Button variant="outline-secondary" onClick={() => setLeaveSearchTerm('')} size="sm"><FaTimesCircle size={12} /></Button>}
                 </InputGroup>
                 <Badge bg="light" text="dark" className="px-3 py-2">{filteredLeaveRequests.length} / {leaveRequests.length} Pending</Badge>
-                <Button 
-                  variant="outline-primary" 
-                  size="sm" 
+                <Button
+                  variant="outline-primary"
+                  size="sm"
                   onClick={() => navigate('/admin/leave-requests')}
                   className="d-flex align-items-center"
                 >
                   <FaEye className="me-1" size={12} />
                   View All
                 </Button>
-                <Button 
-                  variant="outline-success" 
-                  size="sm" 
+                <Button
+                  variant="outline-success"
+                  size="sm"
                   onClick={refreshLeaveRequests}
                   className="d-flex align-items-center"
                 >
@@ -2179,8 +2225,8 @@ const AdminDashboard = () => {
                             <Badge bg="warning" className="small">Pending</Badge>
                           </td>
                           <td className="text-center">
-                            <Button 
-                              variant="outline-primary" 
+                            <Button
+                              variant="outline-primary"
                               size="sm"
                               onClick={() => navigate('/admin/leave-requests')}
                               title="View Details"
@@ -2195,9 +2241,9 @@ const AdminDashboard = () => {
                         <td colSpan="8" className="text-center py-4">
                           <FaCalendarAlt size={30} className="text-muted mb-2 opacity-50" />
                           <p className="text-muted mb-0">No pending leave requests found</p>
-                          <Button 
-                            variant="link" 
-                            size="sm" 
+                          <Button
+                            variant="link"
+                            size="sm"
                             onClick={() => navigate('/admin/leave-requests')}
                             className="mt-2"
                           >
@@ -2214,9 +2260,9 @@ const AdminDashboard = () => {
                   <small className="text-muted">
                     Showing first 10 of {filteredLeaveRequests.length} pending requests
                   </small>
-                  <Button 
-                    variant="link" 
-                    size="sm" 
+                  <Button
+                    variant="link"
+                    size="sm"
                     onClick={() => navigate('/admin/leave-requests')}
                     className="ms-2"
                   >
