@@ -2007,6 +2007,49 @@ const AdminDashboard = () => {
                           lateDisplay = parts.join(' ');
                         }
 
+                        // Calculate working hours and determine status
+                        let workingStatus = 'Not Clocked';
+                        let statusBg = 'secondary';
+                        let statusIcon = null;
+                        let hoursDisplay = null;
+
+                        if (att.clock_in) {
+                          if (att.clock_out) {
+                            // Both clock_in and clock_out exist - calculate working hours
+                            const clockInTime = new Date(att.clock_in);
+                            const clockOutTime = new Date(att.clock_out);
+                            let totalMinutes = Math.round((clockOutTime - clockInTime) / (1000 * 60));
+                            if (totalMinutes < 0) totalMinutes += 24 * 60;
+                            const totalHours = totalMinutes / 60;
+                            const displayHours = Math.floor(totalMinutes / 60);
+                            const displayMinutes = totalMinutes % 60;
+                            hoursDisplay = `${displayHours}h ${displayMinutes}m`;
+
+                            // Determine status based on working hours
+                            if (totalMinutes >= 540) {
+                              // >= 9 hours = present
+                              workingStatus = `Present (${hoursDisplay})`;
+                              statusBg = 'success';
+                              statusIcon = <FaCheckCircle className="me-1" size={10} />;
+                            } else if (totalMinutes >= 300) {
+                              // 5-8:59 hours = half day
+                              workingStatus = `Half Day (${hoursDisplay})`;
+                              statusBg = 'warning';
+                              statusIcon = null;
+                            } else {
+                              // < 5 hours = absent
+                              workingStatus = `Absent (${hoursDisplay})`;
+                              statusBg = 'danger';
+                              statusIcon = null;
+                            }
+                          } else {
+                            // Only clock_in, no clock_out - still working
+                            workingStatus = 'Working';
+                            statusBg = 'info';
+                            statusIcon = <FaClock className="me-1" size={10} />;
+                          }
+                        }
+
                         return (
                           <tr key={att.id || index}>
                             <td className="text-center">{index + 1}</td>
@@ -2032,35 +2075,10 @@ const AdminDashboard = () => {
                               {formatTime(att.clock_out) || '--:--'}
                             </td>
                             <td>
-                              {att.clock_in && !att.clock_out ? (
-                                lateDisplay ? (
-                                  <Badge bg="warning" className="px-2 py-1">
-                                    <FaExclamationTriangle className="me-1" size={10} />
-                                    Working (Late {lateDisplay})
-                                  </Badge>
-                                ) : (
-                                  <Badge bg="info" className="px-2 py-1">
-                                    <FaClock className="me-1" size={10} />
-                                    Working
-                                  </Badge>
-                                )
-                              ) : att.clock_in && att.clock_out ? (
-                                lateDisplay ? (
-                                  <Badge bg="warning" className="px-2 py-1">
-                                    <FaExclamationTriangle className="me-1" size={10} />
-                                    Present (Late {lateDisplay})
-                                  </Badge>
-                                ) : (
-                                  <Badge bg="success" className="px-2 py-1">
-                                    <FaCheckCircle className="me-1" size={10} />
-                                    Present
-                                  </Badge>
-                                )
-                              ) : (
-                                <Badge bg="secondary" className="px-2 py-1">
-                                  Not Clocked
-                                </Badge>
-                              )}
+                              <Badge bg={statusBg} className="px-2 py-1">
+                                {statusIcon}
+                                {workingStatus}
+                              </Badge>
                             </td>
                           </tr>
                         );
