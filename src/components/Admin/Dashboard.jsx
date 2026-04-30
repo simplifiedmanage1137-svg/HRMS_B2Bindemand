@@ -65,7 +65,6 @@ import API_ENDPOINTS from '../../config/api';
 import { useNavigate } from 'react-router-dom';
 import { useNotification } from '../../context/NotificationContext';
 import AdminRatings from './AdminRatings';
-// import HistoricalLateMarksUpdater from './HistoricalLateMarksUpdater';
 
 ChartJS.register(
   CategoryScale,
@@ -97,13 +96,6 @@ const RegularizationRequests = ({ onRequestCountChange }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
   const { addNotification } = useNotification();
-  const [activeAdminTab, setActiveAdminTab] = useState('overview');
-  const [managerRatings, setManagerRatings] = useState([]);
-const [adminRatings, setAdminRatings] = useState([]);
-const [managerAverage, setManagerAverage] = useState(null);
-const [adminAverage, setAdminAverage] = useState(null);
-const [showRatingHistory, setShowRatingHistory] = useState(false);
-const [activeRatingTab, setActiveRatingTab] = useState('manager');
 
   const fetchRequests = async () => {
     try {
@@ -127,151 +119,15 @@ const [activeRatingTab, setActiveRatingTab] = useState('manager');
     }
   };
 
-  const fetchEmployeeRatings = async () => {
-  try {
-    const response = await axios.get(`${API_ENDPOINTS.RATINGS}/employee/${user.employeeId}/history`);
-    if (response.data.success) {
-      setManagerRatings(response.data.manager_ratings || []);
-      setAdminRatings(response.data.admin_ratings || []);
-      setManagerAverage(response.data.manager_average);
-      setAdminAverage(response.data.admin_average);
-    }
-  } catch (error) {
-    console.error('Error fetching ratings:', error);
-  }
-};
-
-
   useEffect(() => {
     fetchRequests();
     const interval = setInterval(fetchRequests, 30000);
     return () => clearInterval(interval);
   }, []);
 
-  const formatLateTime = (lateMinutes) => {
-    if (!lateMinutes || lateMinutes <= 0) return null;
-
-    const totalSeconds = Math.round(lateMinutes * 60);
-    const hours = Math.floor(totalSeconds / 3600);
-    const remainingSeconds = totalSeconds % 3600;
-    const minutes = Math.floor(remainingSeconds / 60);
-    const seconds = remainingSeconds % 60;
-
-    const parts = [];
-    if (hours > 0) parts.push(`${hours}h`);
-    if (minutes > 0) parts.push(`${minutes}m`);
-    if (seconds > 0 || (hours === 0 && minutes === 0)) parts.push(`${seconds}s`);
-
-    return parts.join(' ');
-  };
-
-  const handleApprove = async () => {
-    console.log('Selected Request:', selectedRequest);
-    console.log('Request ID being sent:', selectedRequest.id);
-    console.log('Request ID type:', typeof selectedRequest.id);
-    if (!selectedRequest) return;
-    if (!approvedTime) {
-      setMessage({ type: 'warning', text: 'Please select clock-out time' });
-      return;
-    }
-
-    setProcessing(true);
-    try {
-      const requestId = String(selectedRequest.id);
-      console.log('📤 Approving request with ID:', requestId);
-
-      const response = await axios.put(
-        API_ENDPOINTS.ATTENDANCE_APPROVE_REGULARIZATION(requestId),
-        {
-          approved_clock_out_time: approvedTime,
-          admin_notes: adminNotes
-        }
-      );
-
-      console.log('✅ Approval response:', response.data);
-
-      setMessage({ type: 'success', text: 'Regularization request approved successfully!' });
-
-      setShowApproveModal(false);
-      setSelectedRequest(null);
-      setApprovedTime('');
-      setAdminNotes('');
-
-      // Clear employee's local session storage
-      const employeeId = selectedRequest.employee_id;
-      const storageKey = `attendance_session_${employeeId}`;
-      localStorage.removeItem(storageKey);
-
-      if (addNotification) {
-        addNotification({
-          employee_id: employeeId,
-          title: 'Regularization Request Approved',
-          message: `Your regularization request for ${selectedRequest.attendance_date} has been approved.`,
-          type: 'regularization_approved'
-        });
-      }
-
-      await fetchRequests();
-      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
-
-    } catch (error) {
-      console.error('Error approving regularization:', error);
-      console.error('Error details:', error.response?.data);
-      setMessage({
-        type: 'danger',
-        text: error.response?.data?.message || 'Failed to approve request'
-      });
-    } finally {
-      setProcessing(false);
-    }
-  };
-
-  const handleReject = async () => {
-    if (!selectedRequest) return;
-
-    setProcessing(true);
-    try {
-      const requestId = String(selectedRequest.id);
-
-      const response = await axios.put(
-        API_ENDPOINTS.ATTENDANCE_REJECT_REGULARIZATION(requestId),
-        { rejection_reason: rejectionReason }
-      );
-
-      console.log('❌ Regularization rejected:', response.data);
-
-      setMessage({ type: 'success', text: 'Regularization request rejected' });
-
-      setShowRejectModal(false);
-      setSelectedRequest(null);
-      setRejectionReason('');
-
-      if (addNotification) {
-        addNotification({
-          employee_id: selectedRequest.employee_id,
-          title: 'Regularization Request Rejected',
-          message: `Your regularization request for ${selectedRequest.attendance_date} has been rejected. Reason: ${rejectionReason || 'Not provided'}`,
-          type: 'regularization_rejected'
-        });
-      }
-
-      await fetchRequests();
-      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
-    } catch (error) {
-      console.error('Error rejecting regularization:', error);
-      setMessage({
-        type: 'danger',
-        text: error.response?.data?.message || 'Failed to reject request'
-      });
-    } finally {
-      setProcessing(false);
-    }
-  };
-
   const formatDateTime = (datetime) => {
     if (!datetime) return 'N/A';
     try {
-      // Handle IST string format: "YYYY-MM-DD HH:MM:SS"
       if (typeof datetime === 'string' && datetime.includes(' ') && !datetime.includes('T')) {
         const [datePart, timePart] = datetime.split(' ');
         const [year, month, day] = datePart.split('-');
@@ -285,7 +141,6 @@ const [activeRatingTab, setActiveRatingTab] = useState('manager');
           hour12: true
         });
       }
-      // Handle ISO/UTC format
       const date = new Date(datetime);
       return date.toLocaleString('en-US', {
         day: '2-digit',
@@ -322,6 +177,94 @@ const [activeRatingTab, setActiveRatingTab] = useState('manager');
     }
   };
 
+  const handleApprove = async () => {
+    if (!selectedRequest) return;
+    if (!approvedTime) {
+      setMessage({ type: 'warning', text: 'Please select clock-out time' });
+      return;
+    }
+
+    setProcessing(true);
+    try {
+      const requestId = String(selectedRequest.id);
+      const response = await axios.put(
+        API_ENDPOINTS.ATTENDANCE_APPROVE_REGULARIZATION(requestId),
+        {
+          approved_clock_out_time: approvedTime,
+          admin_notes: adminNotes
+        }
+      );
+
+      setMessage({ type: 'success', text: 'Regularization request approved successfully!' });
+      setShowApproveModal(false);
+      setSelectedRequest(null);
+      setApprovedTime('');
+      setAdminNotes('');
+
+      const employeeId = selectedRequest.employee_id;
+      const storageKey = `attendance_session_${employeeId}`;
+      localStorage.removeItem(storageKey);
+
+      if (addNotification) {
+        addNotification({
+          employee_id: employeeId,
+          title: 'Regularization Request Approved',
+          message: `Your regularization request for ${selectedRequest.attendance_date} has been approved.`,
+          type: 'regularization_approved'
+        });
+      }
+
+      await fetchRequests();
+      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+    } catch (error) {
+      console.error('Error approving regularization:', error);
+      setMessage({
+        type: 'danger',
+        text: error.response?.data?.message || 'Failed to approve request'
+      });
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!selectedRequest) return;
+
+    setProcessing(true);
+    try {
+      const requestId = String(selectedRequest.id);
+      await axios.put(
+        API_ENDPOINTS.ATTENDANCE_REJECT_REGULARIZATION(requestId),
+        { rejection_reason: rejectionReason }
+      );
+
+      setMessage({ type: 'success', text: 'Regularization request rejected' });
+      setShowRejectModal(false);
+      setSelectedRequest(null);
+      setRejectionReason('');
+
+      if (addNotification) {
+        addNotification({
+          employee_id: selectedRequest.employee_id,
+          title: 'Regularization Request Rejected',
+          message: `Your regularization request for ${selectedRequest.attendance_date} has been rejected. Reason: ${rejectionReason || 'Not provided'}`,
+          type: 'regularization_rejected'
+        });
+      }
+
+      await fetchRequests();
+      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+    } catch (error) {
+      console.error('Error rejecting regularization:', error);
+      setMessage({
+        type: 'danger',
+        text: error.response?.data?.message || 'Failed to reject request'
+      });
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   const getFilteredRequests = () => {
     if (filter === 'all') return requests;
     return requests.filter(req => req.status === filter);
@@ -337,14 +280,6 @@ const [activeRatingTab, setActiveRatingTab] = useState('manager');
   const currentPageData = getCurrentPageData();
   const totalPages = Math.ceil(filteredRequests.length / itemsPerPage);
 
-  const goToPrevPage = () => {
-    if (currentPage > 1) setCurrentPage(currentPage - 1);
-  };
-
-  const goToNextPage = () => {
-    if (currentPage < totalPages) setCurrentPage(currentPage + 1);
-  };
-
   if (loading) {
     return (
       <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '300px' }}>
@@ -356,40 +291,23 @@ const [activeRatingTab, setActiveRatingTab] = useState('manager');
   return (
     <div>
       {message.text && (
-        <Alert
-          variant={message.type}
-          onClose={() => setMessage({ type: '', text: '' })}
-          dismissible
-          className="mb-3"
-        >
+        <Alert variant={message.type} onClose={() => setMessage({ type: '', text: '' })} dismissible className="mb-3">
           {message.text}
         </Alert>
       )}
 
       <div className="d-flex flex-wrap gap-2 mb-3">
         <ButtonGroup size="sm">
-          <Button
-            variant={filter === 'pending' ? 'warning' : 'outline-secondary'}
-            onClick={() => { setFilter('pending'); setCurrentPage(1); }}
-          >
+          <Button variant={filter === 'pending' ? 'warning' : 'outline-secondary'} onClick={() => { setFilter('pending'); setCurrentPage(1); }}>
             Pending ({requests.filter(r => r.status === 'pending').length})
           </Button>
-          <Button
-            variant={filter === 'approved' ? 'success' : 'outline-secondary'}
-            onClick={() => { setFilter('approved'); setCurrentPage(1); }}
-          >
+          <Button variant={filter === 'approved' ? 'success' : 'outline-secondary'} onClick={() => { setFilter('approved'); setCurrentPage(1); }}>
             Approved ({requests.filter(r => r.status === 'approved').length})
           </Button>
-          <Button
-            variant={filter === 'rejected' ? 'danger' : 'outline-secondary'}
-            onClick={() => { setFilter('rejected'); setCurrentPage(1); }}
-          >
+          <Button variant={filter === 'rejected' ? 'danger' : 'outline-secondary'} onClick={() => { setFilter('rejected'); setCurrentPage(1); }}>
             Rejected ({requests.filter(r => r.status === 'rejected').length})
           </Button>
-          <Button
-            variant={filter === 'all' ? 'primary' : 'outline-secondary'}
-            onClick={() => { setFilter('all'); setCurrentPage(1); }}
-          >
+          <Button variant={filter === 'all' ? 'primary' : 'outline-secondary'} onClick={() => { setFilter('all'); setCurrentPage(1); }}>
             All ({requests.length})
           </Button>
         </ButtonGroup>
@@ -404,11 +322,6 @@ const [activeRatingTab, setActiveRatingTab] = useState('manager');
           <Card.Body className="text-center py-5">
             <FaRegClock size={50} className="text-muted mb-3 opacity-50" />
             <p className="text-muted mb-0">No regularization requests found</p>
-            {filter !== 'all' && (
-              <Button variant="link" size="sm" onClick={() => setFilter('all')} className="mt-2">
-                View all requests
-              </Button>
-            )}
           </Card.Body>
         </Card>
       ) : (
@@ -434,11 +347,7 @@ const [activeRatingTab, setActiveRatingTab] = useState('manager');
                       const globalIndex = (currentPage - 1) * itemsPerPage + index + 1;
                       return (
                         <React.Fragment key={request.id}>
-                          <tr
-                            className={expandedRequest === request.id ? 'table-active' : ''}
-                            style={{ cursor: 'pointer' }}
-                            onClick={() => setExpandedRequest(expandedRequest === request.id ? null : request.id)}
-                          >
+                          <tr className={expandedRequest === request.id ? 'table-active' : ''} style={{ cursor: 'pointer' }} onClick={() => setExpandedRequest(expandedRequest === request.id ? null : request.id)}>
                             <td className="small text-center">{globalIndex}</td>
                             <td className="small">
                               <div className="fw-semibold text-truncate" style={{ maxWidth: '120px' }}>
@@ -477,11 +386,9 @@ const [activeRatingTab, setActiveRatingTab] = useState('manager');
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       setSelectedRequest(request);
-                                      // Convert IST string "YYYY-MM-DD HH:MM:SS" to datetime-local "YYYY-MM-DDTHH:MM"
                                       const reqTime = request.requested_clock_out_time;
                                       let dtLocalValue = '';
                                       if (reqTime) {
-                                        // Handle "YYYY-MM-DD HH:MM:SS" format
                                         const cleaned = reqTime.replace(' ', 'T').substring(0, 16);
                                         dtLocalValue = cleaned;
                                       }
@@ -507,19 +414,8 @@ const [activeRatingTab, setActiveRatingTab] = useState('manager');
                                 </div>
                               )}
                               {request.status !== 'pending' && (
-                                <Button
-                                  variant="outline-secondary"
-                                  size="sm"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setExpandedRequest(expandedRequest === request.id ? null : request.id);
-                                  }}
-                                >
-                                  {expandedRequest === request.id ? (
-                                    <FaEyeSlash className="me-1" size={12} />
-                                  ) : (
-                                    <FaEye className="me-1" size={12} />
-                                  )}
+                                <Button variant="outline-secondary" size="sm" onClick={(e) => { e.stopPropagation(); setExpandedRequest(expandedRequest === request.id ? null : request.id); }}>
+                                  {expandedRequest === request.id ? <FaEyeSlash className="me-1" size={12} /> : <FaEye className="me-1" size={12} />}
                                   Details
                                 </Button>
                               )}
@@ -532,38 +428,22 @@ const [activeRatingTab, setActiveRatingTab] = useState('manager');
                                   <Col xs={12} md={6}>
                                     <div className="small">
                                       <strong>Reason:</strong>
-                                      <p className="text-muted mb-0 mt-1">
-                                        {request.reason || 'No reason provided'}
-                                      </p>
+                                      <p className="text-muted mb-0 mt-1">{request.reason || 'No reason provided'}</p>
                                     </div>
                                   </Col>
                                   <Col xs={12} md={6}>
                                     <div className="small">
                                       <strong>Requested At:</strong>
-                                      <p className="text-muted mb-0 mt-1">
-                                        {formatDateTime(request.created_at)}
-                                      </p>
+                                      <p className="text-muted mb-0 mt-1">{formatDateTime(request.created_at)}</p>
                                     </div>
                                   </Col>
                                   {request.status === 'approved' && request.approved_clock_out_time && (
-                                    <>
-                                      <Col xs={12} md={6}>
-                                        <div className="small">
-                                          <strong>Approved Clock Out:</strong>
-                                          <p className="text-success mb-0 mt-1">
-                                            {formatDateTime(request.approved_clock_out_time)}
-                                          </p>
-                                        </div>
-                                      </Col>
-                                      {request.admin_notes && (
-                                        <Col xs={12} md={6}>
-                                          <div className="small">
-                                            <strong>Admin Notes:</strong>
-                                            <p className="text-muted mb-0 mt-1">{request.admin_notes}</p>
-                                          </div>
-                                        </Col>
-                                      )}
-                                    </>
+                                    <Col xs={12} md={6}>
+                                      <div className="small">
+                                        <strong>Approved Clock Out:</strong>
+                                        <p className="text-success mb-0 mt-1">{formatDateTime(request.approved_clock_out_time)}</p>
+                                      </div>
+                                    </Col>
                                   )}
                                   {request.status === 'rejected' && request.rejection_reason && (
                                     <Col xs={12}>
@@ -592,21 +472,11 @@ const [activeRatingTab, setActiveRatingTab] = useState('manager');
                 Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredRequests.length)} of {filteredRequests.length} requests
               </div>
               <ButtonGroup size="sm">
-                <Button
-                  variant="outline-secondary"
-                  onClick={goToPrevPage}
-                  disabled={currentPage === 1}
-                >
+                <Button variant="outline-secondary" onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1}>
                   <FaArrowLeft size={12} />
                 </Button>
-                <Button variant="outline-secondary" disabled>
-                  Page {currentPage} of {totalPages}
-                </Button>
-                <Button
-                  variant="outline-secondary"
-                  onClick={goToNextPage}
-                  disabled={currentPage === totalPages}
-                >
+                <Button variant="outline-secondary" disabled>Page {currentPage} of {totalPages}</Button>
+                <Button variant="outline-secondary" onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages}>
                   <FaArrowRight size={12} />
                 </Button>
               </ButtonGroup>
@@ -618,103 +488,37 @@ const [activeRatingTab, setActiveRatingTab] = useState('manager');
       {/* Approve Modal */}
       <Modal show={showApproveModal} onHide={() => setShowApproveModal(false)} centered size="lg">
         <Modal.Header closeButton className="bg-success text-white">
-          <Modal.Title className="h6">
-            <FaCheckCircle className="me-2" />
-            Approve Regularization Request
-          </Modal.Title>
+          <Modal.Title className="h6"><FaCheckCircle className="me-2" />Approve Regularization Request</Modal.Title>
         </Modal.Header>
         <Modal.Body className="p-4">
           {selectedRequest && (
             <>
               <div className="mb-3 p-3 bg-light rounded">
                 <Row className="g-3">
-                  <Col xs={12} md={6}>
-                    <div className="small">
-                      <strong>Employee:</strong>
-                      <p className="mb-0">{selectedRequest.employee_name}</p>
-                      <small className="text-muted">{selectedRequest.employee_id}</small>
-                    </div>
-                  </Col>
-                  <Col xs={12} md={6}>
-                    <div className="small">
-                      <strong>Date:</strong>
-                      <p className="mb-0">{formatDate(selectedRequest.attendance_date)}</p>
-                    </div>
-                  </Col>
-                  <Col xs={12} md={6}>
-                    <div className="small">
-                      <strong>Clock In Time:</strong>
-                      <p className="mb-0 text-success">{formatDateTime(selectedRequest.clock_in_time)}</p>
-                    </div>
-                  </Col>
-                  <Col xs={12} md={6}>
-                    <div className="small">
-                      <strong>Requested Clock Out:</strong>
-                      <p className="mb-0 text-warning">{formatDateTime(selectedRequest.requested_clock_out_time)}</p>
-                    </div>
-                  </Col>
-                  <Col xs={12}>
-                    <div className="small">
-                      <strong>Reason:</strong>
-                      <p className="mb-0 text-muted">{selectedRequest.reason || 'No reason provided'}</p>
-                    </div>
-                  </Col>
+                  <Col xs={12} md={6}><div className="small"><strong>Employee:</strong><p className="mb-0">{selectedRequest.employee_name}</p><small className="text-muted">{selectedRequest.employee_id}</small></div></Col>
+                  <Col xs={12} md={6}><div className="small"><strong>Date:</strong><p className="mb-0">{formatDate(selectedRequest.attendance_date)}</p></div></Col>
+                  <Col xs={12} md={6}><div className="small"><strong>Clock In Time:</strong><p className="mb-0 text-success">{formatDateTime(selectedRequest.clock_in_time)}</p></div></Col>
+                  <Col xs={12} md={6}><div className="small"><strong>Requested Clock Out:</strong><p className="mb-0 text-warning">{formatDateTime(selectedRequest.requested_clock_out_time)}</p></div></Col>
+                  <Col xs={12}><div className="small"><strong>Reason:</strong><p className="mb-0 text-muted">{selectedRequest.reason || 'No reason provided'}</p></div></Col>
                 </Row>
               </div>
-
               <div className="mb-3">
                 <label className="form-label fw-semibold">Clock Out Time *</label>
-                <input
-                  type="datetime-local"
-                  className="form-control"
-                  value={approvedTime}
-                  onChange={(e) => setApprovedTime(e.target.value)}
-                  required
-                />
-                <small className="text-muted">
-                  You can adjust the clock-out time if needed
-                </small>
+                <input type="datetime-local" className="form-control" value={approvedTime} onChange={(e) => setApprovedTime(e.target.value)} required />
+                <small className="text-muted">You can adjust the clock-out time if needed</small>
               </div>
-
               <div className="mb-3">
                 <label className="form-label fw-semibold">Admin Notes (Optional)</label>
-                <textarea
-                  className="form-control"
-                  rows="3"
-                  placeholder="Add any notes about this approval..."
-                  value={adminNotes}
-                  onChange={(e) => setAdminNotes(e.target.value)}
-                />
+                <textarea className="form-control" rows="3" placeholder="Add any notes about this approval..." value={adminNotes} onChange={(e) => setAdminNotes(e.target.value)} />
               </div>
-
-              <Alert variant="info" className="small">
-                <FaInfoCircle className="me-2" />
-                After approval, the employee's attendance will be updated automatically.
-              </Alert>
+              <Alert variant="info" className="small"><FaInfoCircle className="me-2" />After approval, the employee's attendance will be updated automatically.</Alert>
             </>
           )}
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" size="sm" onClick={() => setShowApproveModal(false)}>
-            Cancel
-          </Button>
-          <Button
-            variant="success"
-            size="sm"
-            onClick={handleApprove}
-            disabled={processing || !approvedTime}
-          >
-            {processing ? (
-              <>
-                <Spinner size="sm" animation="border" className="me-2" />
-                Processing...
-              </>
-            ) : (
-              <>
-                <FaCheckCircle className="me-2" />
-                Approve Request
-              </>
-            )}
+          <Button variant="secondary" size="sm" onClick={() => setShowApproveModal(false)}>Cancel</Button>
+          <Button variant="success" size="sm" onClick={handleApprove} disabled={processing || !approvedTime}>
+            {processing ? <><Spinner size="sm" animation="border" className="me-2" />Processing...</> : <><FaCheckCircle className="me-2" />Approve Request</>}
           </Button>
         </Modal.Footer>
       </Modal>
@@ -722,67 +526,29 @@ const [activeRatingTab, setActiveRatingTab] = useState('manager');
       {/* Reject Modal */}
       <Modal show={showRejectModal} onHide={() => setShowRejectModal(false)} centered>
         <Modal.Header closeButton className="bg-danger text-white">
-          <Modal.Title className="h6">
-            <FaTimesCircle className="me-2" />
-            Reject Regularization Request
-          </Modal.Title>
+          <Modal.Title className="h6"><FaTimesCircle className="me-2" />Reject Regularization Request</Modal.Title>
         </Modal.Header>
         <Modal.Body className="p-4">
           {selectedRequest && (
             <>
               <div className="mb-3 p-3 bg-light rounded">
                 <Row className="g-3">
-                  <Col xs={12}>
-                    <div className="small">
-                      <strong>Employee:</strong>
-                      <p className="mb-0">{selectedRequest.employee_name}</p>
-                    </div>
-                  </Col>
-                  <Col xs={12}>
-                    <div className="small">
-                      <strong>Date:</strong>
-                      <p className="mb-0">{formatDate(selectedRequest.attendance_date)}</p>
-                    </div>
-                  </Col>
+                  <Col xs={12}><div className="small"><strong>Employee:</strong><p className="mb-0">{selectedRequest.employee_name}</p></div></Col>
+                  <Col xs={12}><div className="small"><strong>Date:</strong><p className="mb-0">{formatDate(selectedRequest.attendance_date)}</p></div></Col>
                 </Row>
               </div>
-
               <div className="mb-3">
                 <label className="form-label fw-semibold">Rejection Reason *</label>
-                <textarea
-                  className="form-control"
-                  rows="3"
-                  placeholder="Please provide a reason for rejection..."
-                  value={rejectionReason}
-                  onChange={(e) => setRejectionReason(e.target.value)}
-                  required
-                />
+                <textarea className="form-control" rows="3" placeholder="Please provide a reason for rejection..." value={rejectionReason} onChange={(e) => setRejectionReason(e.target.value)} required />
                 <small className="text-muted">This will be sent to the employee</small>
               </div>
             </>
           )}
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" size="sm" onClick={() => setShowRejectModal(false)}>
-            Cancel
-          </Button>
-          <Button
-            variant="danger"
-            size="sm"
-            onClick={handleReject}
-            disabled={processing || !rejectionReason}
-          >
-            {processing ? (
-              <>
-                <Spinner size="sm" animation="border" className="me-2" />
-                Processing...
-              </>
-            ) : (
-              <>
-                <FaTimesCircle className="me-2" />
-                Reject Request
-              </>
-            )}
+          <Button variant="secondary" size="sm" onClick={() => setShowRejectModal(false)}>Cancel</Button>
+          <Button variant="danger" size="sm" onClick={handleReject} disabled={processing || !rejectionReason}>
+            {processing ? <><Spinner size="sm" animation="border" className="me-2" />Processing...</> : <><FaTimesCircle className="me-2" />Reject Request</>}
           </Button>
         </Modal.Footer>
       </Modal>
@@ -821,7 +587,7 @@ const AdminDashboard = () => {
   const [message, setMessage] = useState({ type: '', text: '' });
   const [lastUpdated, setLastUpdated] = useState(new Date());
   const [totalEmployees, setTotalEmployees] = useState(0);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState('overview'); // overview, birthdays, anniversaries, regularization
   const [regularizationCount, setRegularizationCount] = useState(0);
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportType, setExportType] = useState('attendance');
@@ -870,7 +636,6 @@ const AdminDashboard = () => {
     };
   }, []);
 
-  // Debug: Log leave requests state changes
   useEffect(() => {
     console.log('📊 Leave Requests State Updated:', {
       total: leaveRequests.length,
@@ -931,20 +696,9 @@ const AdminDashboard = () => {
 
       fetchCompleteEvents(employees);
 
-      // FIXED: Better error handling for leave balance
       const balancesPromises = employees.map(async (emp) => {
         try {
           const balanceRes = await axios.get(API_ENDPOINTS.LEAVE_BALANCE(emp.employee_id));
-          console.log(`✅ Leave balance for ${emp.employee_id} (${emp.first_name}):`, {
-            total_accrued: balanceRes.data.total_accrued,
-            used: balanceRes.data.used,
-            pending: balanceRes.data.pending,
-            available: balanceRes.data.available,
-            months_completed_in_year: balanceRes.data.months_completed_in_year,
-            is_probation_complete: balanceRes.data.is_probation_complete
-          });
-
-          // Ensure we have all required fields with proper structure
           return {
             ...emp,
             leaveBalance: {
@@ -960,8 +714,7 @@ const AdminDashboard = () => {
             }
           };
         } catch (error) {
-          console.error(`❌ Error fetching leave balance for ${emp.employee_id}:`, error);
-          // Return default balance structure
+          console.error(`Error fetching leave balance for ${emp.employee_id}:`, error);
           return {
             ...emp,
             leaveBalance: {
@@ -980,13 +733,6 @@ const AdminDashboard = () => {
       });
 
       const employeesWithBalance = await Promise.all(balancesPromises);
-
-      // Debug: Log final balances
-      console.log('\n📊 FINAL LEAVE BALANCES:');
-      employeesWithBalance.forEach(emp => {
-        console.log(`${emp.employee_id} | ${emp.first_name} ${emp.last_name}: Total Accrued = ${emp.leaveBalance?.total_accrued}, Available = ${emp.leaveBalance?.available}`);
-      });
-
       setEmployeeLeaveBalances(employeesWithBalance);
 
       await refreshLeaveRequests();
@@ -1016,12 +762,6 @@ const AdminDashboard = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleRegularizationApproved = (employeeId) => {
-    console.log(`Regularization approved for employee: ${employeeId}`);
-    fetchDashboardData();
-    refreshAttendanceData();
   };
 
   const fetchCompleteEvents = (employees = null) => {
@@ -1210,11 +950,10 @@ const AdminDashboard = () => {
       const today = new Date().toISOString().split('T')[0];
       const attendanceRes = await axios.get(`${API_ENDPOINTS.ATTENDANCE_REPORT}?start=${today}&end=${today}`);
       const attendanceData = attendanceRes.data.attendance || [];
-      // Only show employees who have clocked in today
       const clockedInData = attendanceData.filter(a => a.clock_in);
       setTodayAttendance(clockedInData);
       setFilteredAttendance(clockedInData);
-      updateStats(attendanceData); // stats use full data
+      updateStats(attendanceData);
       setLastUpdated(new Date());
     } catch (error) {
       console.error('Error refreshing attendance:', error);
@@ -1225,9 +964,7 @@ const AdminDashboard = () => {
     try {
       console.log('🔄 Fetching pending leave requests for admin dashboard...');
       const leavesRes = await axios.get(`${API_ENDPOINTS.LEAVES}?all=true`);
-      console.log('📊 Leave requests response:', leavesRes.data);
-
-      // Handle both array response and object with data property
+      
       let allLeaves = [];
       if (Array.isArray(leavesRes.data)) {
         allLeaves = leavesRes.data;
@@ -1238,15 +975,12 @@ const AdminDashboard = () => {
       }
 
       const pendingLeaves = allLeaves.filter(leave => leave.status === 'pending');
-
       console.log(`✅ Found ${allLeaves.length} total leaves, ${pendingLeaves.length} pending`);
-
+      
       setLeaveRequests(pendingLeaves);
       setFilteredLeaveRequests(pendingLeaves);
     } catch (error) {
       console.error('❌ Error refreshing leave requests:', error);
-      console.error('Error response:', error.response?.data);
-      // Set empty arrays on error to prevent UI issues
       setLeaveRequests([]);
       setFilteredLeaveRequests([]);
     }
@@ -1254,9 +988,6 @@ const AdminDashboard = () => {
 
   const updateStats = (attendanceData) => {
     const total = totalEmployees;
-
-    // ✅ FIXED: Prioritize clock_in/clock_out over status field
-    // If employee has BOTH clock_in AND clock_out, they're NOT absent
     let present = 0;
     let halfDay = 0;
     let working = 0;
@@ -1264,7 +995,6 @@ const AdminDashboard = () => {
     let late = 0;
 
     attendanceData.forEach(a => {
-      // If they have both clock_in and clock_out, they completed their shift
       if (a.clock_in && a.clock_out) {
         if (a.status === 'half_day') {
           halfDay++;
@@ -1275,14 +1005,12 @@ const AdminDashboard = () => {
           late++;
         }
       }
-      // If they're still working or only have clock_in (no clock_out)
       else if (a.clock_in && !a.clock_out) {
         working++;
         if (parseFloat(a.late_minutes) > 0) {
           late++;
         }
       }
-      // Only mark as absent if they have NO clock_in at all
       else if (!a.clock_in) {
         absent++;
       }
@@ -1290,8 +1018,6 @@ const AdminDashboard = () => {
 
     const onLeave = attendanceData.filter(a => a.is_on_leave || a.status === 'on_leave').length;
     const totalPresent = present + halfDay + working;
-
-    // Recalculate absent: those who are not present, not on leave, and have no clock_in
     absent = total - totalPresent - onLeave;
     absent = absent < 0 ? 0 : absent;
 
@@ -1381,21 +1107,6 @@ const AdminDashboard = () => {
     }
   };
 
-  const departments = ['all', ...new Set(employeeLeaveBalances.map(emp => emp.department).filter(Boolean))];
-  const totalLeavesAvailable = employeeLeaveBalances.reduce((sum, emp) => {
-    const available = parseFloat(emp.leaveBalance?.available) || 0;
-    return sum + available;
-  }, 0);
-
-  const averageLeavesPerEmployee = employeeLeaveBalances.length > 0
-    ? (totalLeavesAvailable / employeeLeaveBalances.length).toFixed(1)
-    : 0;
-
-  const employeesWithLowBalance = employeeLeaveBalances.filter(emp => {
-    const available = parseFloat(emp.leaveBalance?.available) || 0;
-    return available < 3;
-  }).length;
-
   const formatTime = (datetime) => {
     if (!datetime) return '--:--';
     return new Date(datetime).toLocaleTimeString('en-US', {
@@ -1415,17 +1126,6 @@ const AdminDashboard = () => {
     });
   };
 
-  const getStatusBadge = (record) => {
-    if (record.is_on_leave || record.status === 'on_leave') {
-      return <Badge bg="purple" style={{ backgroundColor: '#6f42c1' }}><FaUmbrellaBeach className="me-1" size={10} /> On Leave</Badge>;
-    }
-    if (!record.clock_in) return <Badge bg="secondary">Not Clocked</Badge>;
-    if (!record.clock_out) return <Badge bg="info">Working</Badge>;
-    if (record.status === 'present') return <Badge bg="success">Present</Badge>;
-    if (record.status === 'half_day') return <Badge bg="warning">Half Day</Badge>;
-    return <Badge bg="danger">Absent</Badge>;
-  };
-
   const attendanceChartData = {
     labels: ['Present', 'Absent', 'On Leave', 'Half Day', 'Late'],
     datasets: [{
@@ -1435,6 +1135,10 @@ const AdminDashboard = () => {
     }]
   };
 
+  const departments = ['all', ...new Set(employeeLeaveBalances.map(emp => emp.department).filter(Boolean))];
+  const filteredEmployees = getFilteredEmployees();
+  const filteredBirthdays = getFilteredBirthdays();
+  const filteredAnniversaries = getFilteredAnniversaries();
   const uniqueDepartments = [...new Set(allBirthdays.map(emp => emp.department).filter(Boolean))];
 
   if (loading) {
@@ -1448,10 +1152,6 @@ const AdminDashboard = () => {
     );
   }
 
-  const filteredEmployees = getFilteredEmployees();
-  const filteredBirthdays = getFilteredBirthdays();
-  const filteredAnniversaries = getFilteredAnniversaries();
-
   return (
     <div className="p-2 p-md-3 p-lg-4">
       {/* Header */}
@@ -1460,7 +1160,6 @@ const AdminDashboard = () => {
           <h4 className="mb-1 d-flex align-items-center flex-wrap">
             <FaUsers className="me-2 text-dark" />
             <span>Admin Dashboard</span>
-
           </h4>
           <p className="text-muted mb-0 small d-flex align-items-center flex-wrap">
             <FaClock className="me-1" size={12} />
@@ -1468,18 +1167,8 @@ const AdminDashboard = () => {
           </p>
         </div>
 
-        {/* Only ONE set of buttons - Remove the duplicate */}
         <div className="d-flex gap-2">
-          <Button
-            variant="outline-primary"
-            size="sm"
-            onClick={() => {
-              fetchDashboardData();
-              if (showNotification) {
-                showNotification('Refreshing dashboard data...', 'info');
-              }
-            }}
-          >
+          <Button variant="outline-primary" size="sm" onClick={() => { fetchDashboardData(); }}>
             <FaSyncAlt className="me-1" size={12} />
             Refresh
           </Button>
@@ -1487,7 +1176,6 @@ const AdminDashboard = () => {
             <FaDownload className="me-1" size={12} />
             Export
           </Button>
-          {/* <HistoricalLateMarksUpdater /> */}
         </div>
       </div>
 
@@ -1502,49 +1190,34 @@ const AdminDashboard = () => {
         <ButtonGroup>
           <Button
             variant={activeTab === 'overview' ? 'primary' : 'outline-secondary'}
-            onClick={() => {
-        setActiveTab('overview');
-        setActiveAdminTab('overview'); // Reset admin tab when switching to overview
-      }}
+            onClick={() => setActiveTab('overview')}
           >
             <FaChartBar className="me-2" />
             Overview
           </Button>
           <Button
-            variant={activeAdminTab === 'ratings' ? 'primary' : 'outline-secondary'}
-            onClick={() => {
-        setActiveAdminTab('ratings');
-        setActiveTab('ratings'); // Set activeTab as well
-      }}
+            variant={activeTab === 'ratings' ? 'primary' : 'outline-secondary'}
+            onClick={() => setActiveTab('ratings')}
           >
             <FaStar className="me-2" /> Employee Ratings
           </Button>
           <Button
             variant={activeTab === 'birthdays' ? 'info' : 'outline-secondary'}
-            onClick={() => {
-        setActiveTab('birthdays');
-        setActiveAdminTab('overview'); // Reset admin tab
-      }}
+            onClick={() => setActiveTab('birthdays')}
           >
             <FaBirthdayCake className="me-2" />
             Birthdays ({allBirthdays.length})
           </Button>
           <Button
             variant={activeTab === 'anniversaries' ? 'warning' : 'outline-secondary'}
-            onClick={() => {
-        setActiveTab('anniversaries');
-        setActiveAdminTab('overview'); // Reset admin tab
-      }}
+            onClick={() => setActiveTab('anniversaries')}
           >
             <FaTrophy className="me-2" />
             Work Anniversaries ({allAnniversaries.length})
           </Button>
           <Button
             variant={activeTab === 'regularization' ? 'warning' : 'outline-secondary'}
-             onClick={() => {
-        setActiveTab('regularization');
-        setActiveAdminTab('overview'); // Reset admin tab
-      }}
+            onClick={() => setActiveTab('regularization')}
           >
             <FaRegClock className="me-2" />
             Regularization Requests
@@ -1557,14 +1230,14 @@ const AdminDashboard = () => {
         </ButtonGroup>
       </div>
 
-      {activeAdminTab === 'ratings' && <AdminRatings />}
+      {/* Tab Content */}
+      {activeTab === 'ratings' && <AdminRatings />}
 
-      {activeTab === 'regularization' ? (
-        <RegularizationRequests
-          onRequestCountChange={setRegularizationCount}
-        />
-      ) : activeTab === 'birthdays' ? (
-        // Birthdays Tab
+      {activeTab === 'regularization' && (
+        <RegularizationRequests onRequestCountChange={setRegularizationCount} />
+      )}
+
+      {activeTab === 'birthdays' && (
         <Card className="border-0 shadow-sm">
           <Card.Header className="bg-gradient py-3" style={{ background: 'linear-gradient(135deg, #ff6b6b 0%, #ff8e8e 100%)' }}>
             <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
@@ -1585,14 +1258,7 @@ const AdminDashboard = () => {
               <Col xs={12} md={3}>
                 <div className="d-flex align-items-center bg-light rounded-3 p-1">
                   <FaSearch className="ms-2 text-muted" size={14} />
-                  <Form.Control
-                    type="text"
-                    placeholder="Search by name or ID..."
-                    value={birthdaySearch}
-                    onChange={(e) => setBirthdaySearch(e.target.value)}
-                    className="border-0 bg-transparent"
-                    size="sm"
-                  />
+                  <Form.Control type="text" placeholder="Search by name or ID..." value={birthdaySearch} onChange={(e) => setBirthdaySearch(e.target.value)} className="border-0 bg-transparent" size="sm" />
                 </div>
               </Col>
               <Col xs={6} md={2}>
@@ -1607,9 +1273,7 @@ const AdminDashboard = () => {
               <Col xs={6} md={2}>
                 <Form.Select size="sm" value={birthdayDepartmentFilter} onChange={(e) => setBirthdayDepartmentFilter(e.target.value)}>
                   <option value="all">All Departments</option>
-                  {uniqueDepartments.map(dept => (
-                    <option key={dept} value={dept}>{dept}</option>
-                  ))}
+                  {uniqueDepartments.map(dept => (<option key={dept} value={dept}>{dept}</option>))}
                 </Form.Select>
               </Col>
               <Col xs={6} md={2}>
@@ -1626,30 +1290,20 @@ const AdminDashboard = () => {
                 </Button>
               </Col>
               <Col xs={12} md={2}>
-                <Button variant="outline-danger" size="sm" onClick={() => {
-                  setBirthdaySearch('');
-                  setBirthdayFilter('all');
-                  setBirthdayDepartmentFilter('all');
-                  setBirthdaySort('date');
-                  setBirthdaySortOrder('asc');
-                }} className="w-100">
-                  <FaFilter className="me-1" size={12} />
-                  Clear
+                <Button variant="outline-danger" size="sm" onClick={() => { setBirthdaySearch(''); setBirthdayFilter('all'); setBirthdayDepartmentFilter('all'); setBirthdaySort('date'); setBirthdaySortOrder('asc'); }} className="w-100">
+                  <FaFilter className="me-1" size={12} /> Clear
                 </Button>
               </Col>
             </Row>
-
             <div className="table-responsive" style={{ maxHeight: 'calc(100vh - 350px)', overflowY: 'auto' }}>
               <Table striped hover className="mb-0 align-middle">
                 <thead className="bg-light sticky-top">
                   <tr className="small">
                     <th className="fw-normal text-center" style={{ width: '5%' }}>#</th>
-                    <th className="fw-normal" style={{ width: '18%' }}>Employee</th>
-                    <th className="fw-normal d-none d-md-table-cell" style={{ width: '12%' }}>Department</th>
-                    <th className="fw-normal" style={{ width: '10%' }}>Birthday</th>
-                    <th className="fw-normal" style={{ width: '10%' }}>Birth Year</th>
-                    <th className="fw-normal" style={{ width: '12%' }}>Age</th>
-                    {/* <th className="fw-normal" style={{ width: '15%' }}>Days Left</th> */}
+                    <th className="fw-normal" style={{ width: '20%' }}>Employee</th>
+                    <th className="fw-normal d-none d-md-table-cell" style={{ width: '15%' }}>Department</th>
+                    <th className="fw-normal" style={{ width: '12%' }}>Birthday</th>
+                    <th className="fw-normal" style={{ width: '10%' }}>Age</th>
                     <th className="fw-normal" style={{ width: '10%' }}>Status</th>
                   </tr>
                 </thead>
@@ -1659,72 +1313,38 @@ const AdminDashboard = () => {
                       <tr key={emp.id} className={emp.status === 'today' ? 'table-success' : ''}>
                         <td className="text-center">{index + 1}</td>
                         <td className="small">
-                          <div className="fw-semibold text-truncate" style={{ maxWidth: '150px' }}>
-                            {emp.first_name} {emp.last_name}
-                          </div>
+                          <div className="fw-semibold text-truncate" style={{ maxWidth: '150px' }}>{emp.first_name} {emp.last_name}</div>
                           <small className="text-muted">{emp.employee_id}</small>
                         </td>
-                        <td className="small d-none d-md-table-cell text-truncate" style={{ maxWidth: '120px' }}>
-                          {emp.department}
-                        </td>
+                        <td className="small d-none d-md-table-cell">{emp.department}</td>
+                        <td className="small"><Badge bg="light" text="dark" pill className="px-2 py-1"><FaBirthdayCake className="me-1" size={10} />{emp.birthdayDate}</Badge></td>
+                        <td className="small"><Badge bg="info" pill>{emp.age} years</Badge></td>
                         <td className="small">
-                          <Badge bg="light" text="dark" pill className="px-2 py-1">
-                            <FaBirthdayCake className="me-1" size={10} />
-                            {emp.birthdayDate}
-                          </Badge>
-                        </td>
-                        <td className="small">
-                          <span className="text-muted">{emp.birthYear}</span>
-                        </td>
-                        <td className="small">
-                          <Badge bg="info" pill>{emp.age} years</Badge>
-                        </td>
-                        <td className="small">
-                          {emp.status === 'today' ? (
-                            <Badge bg="success" pill className="px-2 py-1">
-                              <FaGift className="me-1" size={10} /> Today
-                            </Badge>
-                          ) : emp.status === 'upcoming' ? (
-                            <Badge bg="info" pill>Upcoming</Badge>
-                          ) : (
-                            <Badge bg="secondary" pill>Passed</Badge>
-                          )}
+                          {emp.status === 'today' ? <Badge bg="success" pill><FaGift className="me-1" size={10} /> Today</Badge> : 
+                           emp.status === 'upcoming' ? <Badge bg="info" pill>Upcoming</Badge> : 
+                           <Badge bg="secondary" pill>Passed</Badge>}
                         </td>
                       </tr>
                     ))
                   ) : (
-                    <tr>
-                      <td colSpan="8" className="text-center py-4">
-                        <FaBirthdayCake size={40} className="text-muted mb-2 opacity-50" />
-                        <p className="text-muted mb-0">No birthdays found matching the filters</p>
-                      </td>
-                    </tr>
+                    <tr><td colSpan="7" className="text-center py-4"><FaBirthdayCake size={40} className="text-muted mb-2 opacity-50" /><p className="text-muted mb-0">No birthdays found</p></td></tr>
                   )}
                 </tbody>
               </Table>
             </div>
-            {filteredBirthdays.length > 0 && (
-              <div className="mt-3 text-center text-muted small">
-                Showing {filteredBirthdays.length} of {allBirthdays.length} birthdays
-              </div>
-            )}
           </Card.Body>
         </Card>
-      ) : activeTab === 'anniversaries' ? (
-        // Anniversaries Tab
+      )}
+
+      {activeTab === 'anniversaries' && (
         <Card className="border-0 shadow-sm">
           <Card.Header className="bg-gradient py-3" style={{ background: 'linear-gradient(135deg, #ffd700 0%, #ffed4e 100%)' }}>
             <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
               <div>
-                <h5 className="mb-1 d-flex align-items-center">
-                  <FaTrophy className="me-2" size={20} />
-                  Work Anniversaries
-                </h5>
+                <h5 className="mb-1 d-flex align-items-center"><FaTrophy className="me-2" size={20} />Work Anniversaries</h5>
                 <p className="mb-0 text-muted small">Complete list of all {allAnniversaries.length} employee work anniversaries</p>
               </div>
-              <Badge bg="dark" pill className="px-3 py-2">
-                Total: {allAnniversaries.length} Employees
-              </Badge>
+              <Badge bg="dark" pill className="px-3 py-2">Total: {allAnniversaries.length} Employees</Badge>
             </div>
           </Card.Header>
           <Card.Body className="p-3">
@@ -1732,14 +1352,7 @@ const AdminDashboard = () => {
               <Col xs={12} md={3}>
                 <div className="d-flex align-items-center bg-light rounded-3 p-1">
                   <FaSearch className="ms-2 text-muted" size={14} />
-                  <Form.Control
-                    type="text"
-                    placeholder="Search by name or ID..."
-                    value={anniversarySearch}
-                    onChange={(e) => setAnniversarySearch(e.target.value)}
-                    className="border-0 bg-transparent"
-                    size="sm"
-                  />
+                  <Form.Control type="text" placeholder="Search by name or ID..." value={anniversarySearch} onChange={(e) => setAnniversarySearch(e.target.value)} className="border-0 bg-transparent" size="sm" />
                 </div>
               </Col>
               <Col xs={6} md={2}>
@@ -1754,9 +1367,7 @@ const AdminDashboard = () => {
               <Col xs={6} md={2}>
                 <Form.Select size="sm" value={anniversaryDepartmentFilter} onChange={(e) => setAnniversaryDepartmentFilter(e.target.value)}>
                   <option value="all">All Departments</option>
-                  {uniqueDepartments.map(dept => (
-                    <option key={dept} value={dept}>{dept}</option>
-                  ))}
+                  {uniqueDepartments.map(dept => (<option key={dept} value={dept}>{dept}</option>))}
                 </Form.Select>
               </Col>
               <Col xs={6} md={2}>
@@ -1765,7 +1376,6 @@ const AdminDashboard = () => {
                   <option value="name">Sort by Name</option>
                   <option value="department">Sort by Dept</option>
                   <option value="years">Sort by Years</option>
-                  <option value="month">Sort by Month</option>
                 </Form.Select>
               </Col>
               <Col xs={6} md={1}>
@@ -1774,31 +1384,22 @@ const AdminDashboard = () => {
                 </Button>
               </Col>
               <Col xs={12} md={2}>
-                <Button variant="outline-warning" size="sm" onClick={() => {
-                  setAnniversarySearch('');
-                  setAnniversaryFilter('all');
-                  setAnniversaryDepartmentFilter('all');
-                  setAnniversarySort('date');
-                  setAnniversarySortOrder('asc');
-                }} className="w-100">
-                  <FaFilter className="me-1" size={12} />
-                  Clear
+                <Button variant="outline-warning" size="sm" onClick={() => { setAnniversarySearch(''); setAnniversaryFilter('all'); setAnniversaryDepartmentFilter('all'); setAnniversarySort('date'); setAnniversarySortOrder('asc'); }} className="w-100">
+                  <FaFilter className="me-1" size={12} /> Clear
                 </Button>
               </Col>
             </Row>
-
             <div className="table-responsive" style={{ maxHeight: 'calc(100vh - 350px)', overflowY: 'auto' }}>
               <Table striped hover className="mb-0 align-middle">
                 <thead className="bg-light sticky-top">
                   <tr className="small">
-                    <th className="fw-normal text-center" style={{ width: '5%' }}>#</th>
-                    <th className="fw-normal" style={{ width: '20%' }}>Employee</th>
-                    <th className="fw-normal d-none d-md-table-cell" style={{ width: '15%' }}>Department</th>
-                    <th className="fw-normal" style={{ width: '12%' }}>Joining Date</th>
-                    <th className="fw-normal" style={{ width: '15%' }}>Years</th>
-                    {/* <th className="fw-normal" style={{ width: '15%' }}>Days Left</th> */}
-                    <th className="fw-normal" style={{ width: '10%' }}>Status</th>
-                    <th className="fw-normal" style={{ width: '8%' }}>Celebration</th>
+                    <th className="fw-normal text-center">#</th>
+                    <th className="fw-normal">Employee</th>
+                    <th className="fw-normal d-none d-md-table-cell">Department</th>
+                    <th className="fw-normal">Joining Date</th>
+                    <th className="fw-normal">Years</th>
+                    <th className="fw-normal">Status</th>
+                    <th className="fw-normal">Celebration</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1807,111 +1408,56 @@ const AdminDashboard = () => {
                       <tr key={emp.id} className={emp.status === 'today' ? 'table-warning' : ''}>
                         <td className="text-center">{index + 1}</td>
                         <td className="small">
-                          <div className="fw-semibold text-truncate" style={{ maxWidth: '150px' }}>
-                            {emp.first_name} {emp.last_name}
-                          </div>
+                          <div className="fw-semibold text-truncate" style={{ maxWidth: '150px' }}>{emp.first_name} {emp.last_name}</div>
                           <small className="text-muted">{emp.employee_id}</small>
                         </td>
-                        <td className="small d-none d-md-table-cell text-truncate" style={{ maxWidth: '120px' }}>
-                          {emp.department}
-                        </td>
+                        <td className="small d-none d-md-table-cell">{emp.department}</td>
+                        <td className="small"><Badge bg="light" text="dark" pill className="px-2 py-1"><FaCalendarAlt className="me-1" size={10} />{formatDate(emp.joining_date)}</Badge></td>
+                        <td className="small"><Badge bg="warning" pill><FaStar className="me-1" size={10} />{emp.yearsCompleted} Year{emp.yearsCompleted !== 1 ? 's' : ''}</Badge></td>
                         <td className="small">
-                          <Badge bg="light" text="dark" pill className="px-2 py-1">
-                            <FaCalendarAlt className="me-1" size={10} />
-                            {formatDate(emp.joining_date)}
-                          </Badge>
-                        </td>
-                        <td className="small">
-                          <Badge bg="warning" pill className="px-2 py-1">
-                            <FaStar className="me-1" size={10} />
-                            {emp.yearsCompleted} Year{emp.yearsCompleted !== 1 ? 's' : ''}
-                          </Badge>
-                        </td>
-                        <td className="small">
-                          {emp.status === 'today' ? (
-                            <Badge bg="success" pill className="px-2 py-1">
-                              <FaTrophy className="me-1" size={10} /> Today
-                            </Badge>
-                          ) : emp.status === 'upcoming' ? (
-                            <Badge bg="info" pill>Upcoming</Badge>
-                          ) : (
-                            <Badge bg="secondary" pill>Past</Badge>
-                          )}
+                          {emp.status === 'today' ? <Badge bg="success" pill><FaTrophy className="me-1" size={10} /> Today</Badge> :
+                           emp.status === 'upcoming' ? <Badge bg="info" pill>Upcoming</Badge> : <Badge bg="secondary" pill>Past</Badge>}
                         </td>
                         <td className="small">
                           {emp.yearsCompleted === 1 && <Badge bg="info" pill>1st Year 🎉</Badge>}
                           {emp.yearsCompleted === 5 && <Badge bg="primary" pill>5 Years 🏆</Badge>}
                           {emp.yearsCompleted === 10 && <Badge bg="success" pill>10 Years 🎊</Badge>}
                           {emp.yearsCompleted === 20 && <Badge bg="danger" pill>20 Years 👑</Badge>}
-                          {![1, 5, 10, 20].includes(emp.yearsCompleted) && emp.yearsCompleted > 0 && (
-                            <Badge bg="secondary" pill>{emp.yearsCompleted} Years</Badge>
-                          )}
                         </td>
                       </tr>
                     ))
                   ) : (
-                    <tr>
-                      <td colSpan="8" className="text-center py-4">
-                        <FaTrophy size={40} className="text-muted mb-2 opacity-50" />
-                        <p className="text-muted mb-0">No anniversaries found matching the filters</p>
-                      </td>
-                    </tr>
+                    <tr><td colSpan="8" className="text-center py-4"><FaTrophy size={40} className="text-muted mb-2 opacity-50" /><p className="text-muted mb-0">No anniversaries found</p></td></tr>
                   )}
                 </tbody>
               </Table>
             </div>
-            {filteredAnniversaries.length > 0 && (
-              <div className="mt-3 text-center text-muted small">
-                Showing {filteredAnniversaries.length} of {allAnniversaries.length} anniversaries
-              </div>
-            )}
           </Card.Body>
         </Card>
-      ) : (
-        // Overview Tab Content
+      )}
+
+      {activeTab === 'overview' && (
         <>
           {/* Today's Events Widget */}
           {todayEvents && todayEvents.total > 0 && (
             <Card className="mb-4 border-0 shadow-sm">
               <Card.Header className="bg-gradient text-white py-2" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
-                <h6 className="mb-0 d-flex align-items-center">
-                  <FaBirthdayCake className="me-2" size={14} />
-                  <FaTrophy className="me-2" size={14} />
-                  Today's Celebrations 🎉
-                </h6>
+                <h6 className="mb-0 d-flex align-items-center"><FaBirthdayCake className="me-2" size={14} /><FaTrophy className="me-2" size={14} />Today's Celebrations 🎉</h6>
               </Card.Header>
               <Card.Body className="p-3">
                 <div className="d-flex flex-column flex-sm-row flex-wrap gap-2">
                   {todayEvents.birthdays?.map(emp => (
-                    <Badge key={`birthday-${emp.id}`} bg="light" text="dark" className="p-2 d-flex align-items-center gap-2 shadow-sm w-100 w-sm-auto" style={{ borderLeft: '4px solid #ff6b6b', borderRadius: '8px' }}>
+                    <Badge key={`birthday-${emp.id}`} bg="light" text="dark" className="p-2 d-flex align-items-center gap-2 shadow-sm" style={{ borderLeft: '4px solid #ff6b6b', borderRadius: '8px' }}>
                       <FaBirthdayCake color="#ff6b6b" size={24} />
-                      <div className="text-start">
-                        <span className="small fw-bold d-block">{emp.first_name} {emp.last_name}</span>
-                        <small className="text-muted">{emp.department}</small>
-                        <small className="text-danger d-block">🎂 Birthday Today!</small>
-                      </div>
+                      <div><span className="small fw-bold d-block">{emp.first_name} {emp.last_name}</span><small className="text-muted">{emp.department}</small><small className="text-danger d-block">🎂 Birthday Today!</small></div>
                     </Badge>
                   ))}
                   {todayEvents.anniversaries?.map(emp => (
-                    <Badge key={`anniversary-${emp.id}`} bg="light" text="dark" className="p-2 d-flex align-items-center gap-2 shadow-sm w-100 w-sm-auto" style={{ borderLeft: '4px solid #ffd700', borderRadius: '8px' }}>
+                    <Badge key={`anniversary-${emp.id}`} bg="light" text="dark" className="p-2 d-flex align-items-center gap-2 shadow-sm" style={{ borderLeft: '4px solid #ffd700', borderRadius: '8px' }}>
                       <FaTrophy color="#ffd700" size={24} />
-                      <div className="text-start">
-                        <span className="small fw-bold d-block">{emp.first_name} {emp.last_name}</span>
-                        <small className="text-muted">{emp.department}</small>
-                        <small className="text-warning d-block">🏆 {emp.years} Year{emp.years > 1 ? 's' : ''} Anniversary!</small>
-                      </div>
+                      <div><span className="small fw-bold d-block">{emp.first_name} {emp.last_name}</span><small className="text-muted">{emp.department}</small><small className="text-warning d-block">🏆 {emp.years} Year{emp.years > 1 ? 's' : ''} Anniversary!</small></div>
                     </Badge>
                   ))}
-                </div>
-                <div className="mt-3 pt-2 border-top small text-muted">
-                  <span className="fw-semibold">Total Celebrations Today:</span>
-                  <Badge bg="success" pill className="ms-1">{todayEvents.total}</Badge>
-                  <Button variant="link" size="sm" className="ms-3 p-0" onClick={() => setActiveTab('birthdays')}>
-                    View All Birthdays →
-                  </Button>
-                  <Button variant="link" size="sm" className="ms-2 p-0" onClick={() => setActiveTab('anniversaries')}>
-                    View All Anniversaries →
-                  </Button>
                 </div>
               </Card.Body>
             </Card>
@@ -1920,223 +1466,55 @@ const AdminDashboard = () => {
           {/* Quick Stats Cards */}
           <Row className="mb-4 g-2 g-md-3">
             <Col xs={12} sm={6} lg={3}>
-              <Card className="border-0 shadow-sm bg-white h-100">
-                <Card.Body>
-                  <div className="d-flex justify-content-between align-items-center">
-                    <div>
-                      <h6 className="text-secondary mb-2 small">Total Employees</h6>
-                      <h4 className="mb-0 fw-bold">{totalEmployees}</h4>
-                      <small className="text-muted">Active employees</small>
-                    </div>
-                    <FaUsers size={30} className="text-secondary opacity-50" />
-                  </div>
-                </Card.Body>
-              </Card>
+              <Card className="border-0 shadow-sm bg-white h-100"><Card.Body><div className="d-flex justify-content-between align-items-center"><div><h6 className="text-secondary mb-2 small">Total Employees</h6><h4 className="mb-0 fw-bold">{totalEmployees}</h4><small className="text-muted">Active employees</small></div><FaUsers size={30} className="text-secondary opacity-50" /></div></Card.Body></Card>
             </Col>
             <Col xs={12} sm={6} lg={3}>
-              <Card className="border-0 shadow-sm bg-white h-100">
-                <Card.Body>
-                  <div className="d-flex justify-content-between align-items-center">
-                    <div>
-                      <h6 className="text-secondary mb-2 small">Present Today</h6>
-                      <h4 className="mb-0 fw-bold">{stats.present}</h4>
-                      <small className="text-muted">{stats.working} working now</small>
-                    </div>
-                    <FaUserCheck size={30} className="text-secondary opacity-50" />
-                  </div>
-                </Card.Body>
-              </Card>
+              <Card className="border-0 shadow-sm bg-white h-100"><Card.Body><div className="d-flex justify-content-between align-items-center"><div><h6 className="text-secondary mb-2 small">Present Today</h6><h4 className="mb-0 fw-bold">{stats.present}</h4><small className="text-muted">{stats.working} working now</small></div><FaUserCheck size={30} className="text-secondary opacity-50" /></div></Card.Body></Card>
             </Col>
             <Col xs={12} sm={6} lg={3}>
-              <Card className="border-0 shadow-sm bg-white h-100">
-                <Card.Body>
-                  <div className="d-flex justify-content-between align-items-center">
-                    <div>
-                      <h6 className="text-secondary mb-2 small">On Leave / Half Day</h6>
-                      <h4 className="mb-0 fw-bold">{stats.onLeave + stats.halfDay}</h4>
-                      <small className="text-muted">{stats.halfDay} half day</small>
-                    </div>
-                    <FaUmbrellaBeach size={30} className="text-secondary opacity-50" />
-                  </div>
-                </Card.Body>
-              </Card>
+              <Card className="border-0 shadow-sm bg-white h-100"><Card.Body><div className="d-flex justify-content-between align-items-center"><div><h6 className="text-secondary mb-2 small">On Leave / Half Day</h6><h4 className="mb-0 fw-bold">{stats.onLeave + stats.halfDay}</h4><small className="text-muted">{stats.halfDay} half day</small></div><FaUmbrellaBeach size={30} className="text-secondary opacity-50" /></div></Card.Body></Card>
             </Col>
             <Col xs={12} sm={6} lg={3}>
-              <Card className="border-0 shadow-sm bg-white h-100">
-                <Card.Body>
-                  <div className="d-flex justify-content-between align-items-center">
-                    <div>
-                      <h6 className="text-secondary mb-2 small">Absent</h6>
-                      <h4 className="mb-0 fw-bold">{stats.absent}</h4>
-                      <small className="text-muted">{stats.late} late arrivals</small>
-                    </div>
-                    <FaUserTimes size={30} className="text-secondary opacity-50" />
-                  </div>
-                </Card.Body>
-              </Card>
+              <Card className="border-0 shadow-sm bg-white h-100"><Card.Body><div className="d-flex justify-content-between align-items-center"><div><h6 className="text-secondary mb-2 small">Absent</h6><h4 className="mb-0 fw-bold">{stats.absent}</h4><small className="text-muted">{stats.late} late arrivals</small></div><FaUserTimes size={30} className="text-secondary opacity-50" /></div></Card.Body></Card>
             </Col>
           </Row>
 
           {/* Charts Row */}
           <Row className="mb-4 g-3">
             <Col xs={12} md={6}>
-              <Card className="border-0 shadow-sm h-100">
-                <Card.Header className="bg-white">
-                  <h6 className="mb-0">Attendance Distribution</h6>
-                </Card.Header>
-                <Card.Body className="d-flex justify-content-center">
-                  <div style={{ width: '250px', height: '250px' }}>
-                    <Doughnut data={attendanceChartData} options={{ maintainAspectRatio: true, responsive: true, plugins: { legend: { position: 'bottom' } } }} />
-                  </div>
-                </Card.Body>
-              </Card>
+              <Card className="border-0 shadow-sm h-100"><Card.Header className="bg-white"><h6 className="mb-0">Attendance Distribution</h6></Card.Header><Card.Body className="d-flex justify-content-center"><div style={{ width: '250px', height: '250px' }}><Doughnut data={attendanceChartData} options={{ maintainAspectRatio: true, responsive: true, plugins: { legend: { position: 'bottom' } } }} /></div></Card.Body></Card>
             </Col>
             <Col xs={12} md={6}>
-              <Card className="border-0 shadow-sm h-100">
-                <Card.Header className="bg-white">
-                  <h6 className="mb-0">Department Distribution</h6>
-                </Card.Header>
-                <Card.Body className="d-flex justify-content-center">
-                  <div style={{ width: '250px', height: '250px' }}>
-                    <Doughnut data={departmentChartData} options={{ maintainAspectRatio: true, responsive: true, plugins: { legend: { position: 'bottom' } } }} />
-                  </div>
-                </Card.Body>
-              </Card>
+              <Card className="border-0 shadow-sm h-100"><Card.Header className="bg-white"><h6 className="mb-0">Department Distribution</h6></Card.Header><Card.Body className="d-flex justify-content-center"><div style={{ width: '250px', height: '250px' }}><Doughnut data={departmentChartData} options={{ maintainAspectRatio: true, responsive: true, plugins: { legend: { position: 'bottom' } } }} /></div></Card.Body></Card>
             </Col>
           </Row>
 
           {/* Live Attendance Feed */}
           <Card className="mb-4 border-0 shadow-sm">
             <Card.Header className="bg-light d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center py-3 gap-2">
-              <h5 className="mb-0 text-dark d-flex align-items-center">
-                <FaClock className="me-2 text-dark" />
-                <span>Live Attendance Feed</span>
-              </h5>
-              <div className="d-flex gap-2">
-                <InputGroup size="sm" style={{ width: '250px' }}>
-                  <InputGroup.Text><FaSearch size={12} /></InputGroup.Text>
-                  <Form.Control type="text" placeholder="Search by name or ID..." value={attendanceSearchTerm} onChange={(e) => setAttendanceSearchTerm(e.target.value)} />
-                  {attendanceSearchTerm && <Button variant="outline-secondary" onClick={() => setAttendanceSearchTerm('')} size="sm"><FaTimesCircle size={12} /></Button>}
-                </InputGroup>
-                <Badge bg="dark" className="px-3 py-2">{filteredAttendance.length} Clocked In</Badge>
-              </div>
+              <h5 className="mb-0 text-dark d-flex align-items-center"><FaClock className="me-2 text-dark" /><span>Live Attendance Feed</span></h5>
+              <div className="d-flex gap-2"><InputGroup size="sm" style={{ width: '250px' }}><InputGroup.Text><FaSearch size={12} /></InputGroup.Text><Form.Control type="text" placeholder="Search by name or ID..." value={attendanceSearchTerm} onChange={(e) => setAttendanceSearchTerm(e.target.value)} /></InputGroup><Badge bg="dark" className="px-3 py-2">{filteredAttendance.length} Clocked In</Badge></div>
             </Card.Header>
             <Card.Body className="p-0">
               <div className="table-responsive" style={{ maxHeight: '300px', overflowY: 'auto' }}>
                 <Table striped size="sm" className="mb-0 align-middle">
-                  <thead className="bg-light sticky-top">
-                    <tr className="small">
-                      <th className="fw-normal text-center">#</th>
-                      <th className="fw-normal">Employee</th>
-                      <th className="fw-normal d-none d-md-table-cell">Department</th>
-                      <th className="fw-normal">Clock In</th>
-                      <th className="fw-normal d-none d-sm-table-cell">Clock Out</th>
-                      <th className="fw-normal">Status</th>
-                    </tr>
-                  </thead>
+                  <thead className="bg-light sticky-top"><tr className="small"><th className="fw-normal text-center">#</th><th className="fw-normal">Employee</th><th className="fw-normal d-none d-md-table-cell">Department</th><th className="fw-normal">Clock In</th><th className="fw-normal d-none d-sm-table-cell">Clock Out</th><th className="fw-normal">Status</th></tr></thead>
                   <tbody>
                     {filteredAttendance.length > 0 ? (
-                      filteredAttendance.map((att, index) => {
-                        // Calculate late display consistently
-                        const lateMinutes = parseFloat(att.late_minutes) || 0;
-                        let lateDisplay = null;
-                        if (lateMinutes > 0) {
-                          const totalSeconds = Math.floor(lateMinutes * 60);
-                          const hours = Math.floor(totalSeconds / 3600);
-                          const remainingSeconds = totalSeconds % 3600;
-                          const minutes = Math.floor(remainingSeconds / 60);
-                          const seconds = remainingSeconds % 60;
-                          const parts = [];
-                          if (hours > 0) parts.push(`${hours}h`);
-                          if (minutes > 0) parts.push(`${minutes}m`);
-                          if (seconds > 0 || (hours === 0 && minutes === 0)) parts.push(`${seconds}s`);
-                          lateDisplay = parts.join(' ');
-                        }
-
-                        // Calculate working hours and determine status
-                        let workingStatus = 'Not Clocked';
-                        let statusBg = 'secondary';
-                        let statusIcon = null;
-                        let hoursDisplay = null;
-
-                        if (att.clock_in) {
-                          if (att.clock_out) {
-                            // Both clock_in and clock_out exist - calculate working hours
-                            const clockInTime = new Date(att.clock_in);
-                            const clockOutTime = new Date(att.clock_out);
-                            let totalMinutes = Math.round((clockOutTime - clockInTime) / (1000 * 60));
-                            if (totalMinutes < 0) totalMinutes += 24 * 60;
-                            const totalHours = totalMinutes / 60;
-                            const displayHours = Math.floor(totalMinutes / 60);
-                            const displayMinutes = totalMinutes % 60;
-                            hoursDisplay = `${displayHours}h ${displayMinutes}m`;
-
-                            // Determine status based on working hours
-                            if (totalMinutes >= 540) {
-                              // >= 9 hours = present
-                              workingStatus = `Present (${hoursDisplay})`;
-                              statusBg = 'success';
-                              statusIcon = <FaCheckCircle className="me-1" size={10} />;
-                            } else if (totalMinutes >= 300) {
-                              // 5-8:59 hours = half day
-                              workingStatus = `Half Day (${hoursDisplay})`;
-                              statusBg = 'warning';
-                              statusIcon = null;
-                            } else {
-                              // < 5 hours = absent
-                              workingStatus = `Absent (${hoursDisplay})`;
-                              statusBg = 'danger';
-                              statusIcon = null;
-                            }
-                          } else {
-                            // Only clock_in, no clock_out - still working
-                            workingStatus = 'Working';
-                            statusBg = 'info';
-                            statusIcon = <FaClock className="me-1" size={10} />;
-                          }
-                        }
-
-                        return (
-                          <tr key={att.id || index}>
-                            <td className="text-center">{index + 1}</td>
-                            <td className="small">
-                              <div className="text-truncate" style={{ maxWidth: '120px' }}>{att.first_name} {att.last_name}</div>
-                              <small className="text-muted">{att.employee_id}</small>
-                            </td>
-                            <td className="small d-none d-md-table-cell text-truncate" style={{ maxWidth: '100px' }}>{att.department}</td>
-                            <td className={`small ${att.clock_in ? 'text-success' : 'text-muted'}`}>
-                              <div>
-                                <span className="text-nowrap">{formatTime(att.clock_in)}</span>
-                                {lateDisplay && (
-                                  <div className="mt-1">
-                                    <Badge bg="warning" pill style={{ backgroundColor: '#fd7e14', fontSize: '10px' }}>
-                                      <FaExclamationTriangle className="me-1" size={8} />
-                                      Late {lateDisplay}
-                                    </Badge>
-                                  </div>
-                                )}
-                              </div>
-                            </td>
-                            <td className={`small d-none d-sm-table-cell ${att.clock_out ? 'text-danger' : 'text-muted'}`}>
-                              {formatTime(att.clock_out) || '--:--'}
-                            </td>
-                            <td>
-                              <Badge bg={statusBg} className="px-2 py-1">
-                                {statusIcon}
-                                {workingStatus}
-                              </Badge>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    ) : (
-                      <tr>
-                        <td colSpan="6" className="text-center py-4">
-                          <FaClock size={30} className="text-muted mb-2 opacity-50" />
-                          <p className="text-muted mb-0">No attendance records for today</p>
-                        </td>
-                      </tr>
-                    )}
+                      filteredAttendance.map((att, index) => (
+                        <tr key={att.id || index}>
+                          <td className="text-center">{index + 1}</td>
+                          <td className="small"><div className="text-truncate" style={{ maxWidth: '120px' }}>{att.first_name} {att.last_name}</div><small className="text-muted">{att.employee_id}</small></td>
+                          <td className="small d-none d-md-table-cell">{att.department}</td>
+                          <td className={`small ${att.clock_in ? 'text-success' : 'text-muted'}`}>
+                            <div>{formatTime(att.clock_in)}</div>
+                            {parseFloat(att.late_minutes) > 0 && (<div className="mt-1"><Badge bg="warning" pill style={{ backgroundColor: '#fd7e14', fontSize: '10px' }}><FaExclamationTriangle className="me-1" size={8} /> Late {Math.floor(parseFloat(att.late_minutes))}m</Badge></div>)}
+                          </td>
+                          <td className={`small d-none d-sm-table-cell ${att.clock_out ? 'text-danger' : 'text-muted'}`}>{formatTime(att.clock_out) || '--:--'}</td>
+                          <td>{att.clock_in && att.clock_out ? <Badge bg="success">Present</Badge> : att.clock_in ? <Badge bg="info">Working</Badge> : <Badge bg="secondary">Not Clocked</Badge>}</td>
+                        </tr>
+                      ))
+                    ) : (<tr><td colSpan="6" className="text-center py-4"><FaClock size={30} className="text-muted mb-2 opacity-50" /><p className="text-muted mb-0">No attendance records for today</p></td></tr>)}
                   </tbody>
                 </Table>
               </div>
@@ -2146,340 +1524,52 @@ const AdminDashboard = () => {
           {/* Pending Leave Requests */}
           <Card className="mb-4 border-0 shadow-sm">
             <Card.Header className="bg-light d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center py-3 gap-2">
-              <h5 className="mb-0 text-dark d-flex align-items-center">
-                <FaCalendarAlt className="me-2" />
-                <span>Pending Leave Requests</span>
-                {filteredLeaveRequests.length > 0 && (
-                  <Badge bg="warning" pill className="ms-2">
-                    {filteredLeaveRequests.length}
-                  </Badge>
-                )}
-              </h5>
-              <div className="d-flex gap-2">
-                <InputGroup size="sm" style={{ width: '250px' }}>
-                  <InputGroup.Text><FaSearch size={12} /></InputGroup.Text>
-                  <Form.Control type="text" placeholder="Search by name or ID..." value={leaveSearchTerm} onChange={(e) => setLeaveSearchTerm(e.target.value)} />
-                  {leaveSearchTerm && <Button variant="outline-secondary" onClick={() => setLeaveSearchTerm('')} size="sm"><FaTimesCircle size={12} /></Button>}
-                </InputGroup>
-                <Badge bg="light" text="dark" className="px-3 py-2">{filteredLeaveRequests.length} / {leaveRequests.length} Pending</Badge>
-                <Button
-                  variant="outline-primary"
-                  size="sm"
-                  onClick={() => navigate('/admin/leave-requests')}
-                  className="d-flex align-items-center"
-                >
-                  <FaEye className="me-1" size={12} />
-                  View All
-                </Button>
-                <Button
-                  variant="outline-success"
-                  size="sm"
-                  onClick={refreshLeaveRequests}
-                  className="d-flex align-items-center"
-                >
-                  <FaSyncAlt className="me-1" size={12} />
-                  Refresh
-                </Button>
-              </div>
+              <h5 className="mb-0 text-dark d-flex align-items-center"><FaCalendarAlt className="me-2" /><span>Pending Leave Requests</span>{filteredLeaveRequests.length > 0 && <Badge bg="warning" pill className="ms-2">{filteredLeaveRequests.length}</Badge>}</h5>
+              <div className="d-flex gap-2"><InputGroup size="sm" style={{ width: '250px' }}><InputGroup.Text><FaSearch size={12} /></InputGroup.Text><Form.Control type="text" placeholder="Search by name or ID..." value={leaveSearchTerm} onChange={(e) => setLeaveSearchTerm(e.target.value)} /></InputGroup><Button variant="outline-primary" size="sm" onClick={() => navigate('/admin/leave-requests')}><FaEye className="me-1" size={12} />View All</Button></div>
             </Card.Header>
             <Card.Body className="p-0">
               <div className="table-responsive" style={{ maxHeight: '300px', overflowY: 'auto' }}>
                 <Table striped size="sm" className="mb-0">
-                  <thead className="bg-light sticky-top">
-                    <tr className="small">
-                      <th className="fw-normal text-center">#</th>
-                      <th className="fw-normal">Employee</th>
-                      <th className="fw-normal d-none d-md-table-cell">Leave Type</th>
-                      <th className="fw-normal">Date Range</th>
-                      <th className="fw-normal">Days</th>
-                      <th className="fw-normal">Applied Date</th>
-                      <th className="fw-normal">Status</th>
-                      <th className="fw-normal text-center">Actions</th>
-                    </tr>
-                  </thead>
+                  <thead className="bg-light sticky-top"><tr className="small"><th className="fw-normal text-center">#</th><th className="fw-normal">Employee</th><th className="fw-normal d-none d-md-table-cell">Leave Type</th><th className="fw-normal">Date Range</th><th className="fw-normal">Days</th><th className="fw-normal">Status</th><th className="fw-normal text-center">Actions</th></tr></thead>
                   <tbody>
                     {filteredLeaveRequests.length > 0 ? (
                       filteredLeaveRequests.slice(0, 10).map((leave, index) => (
-                        <tr key={leave.id}>
-                          <td className="text-center">{index + 1}</td>
-                          <td className="small">
-                            <div className="text-truncate" style={{ maxWidth: '100px' }}>
-                              {leave.first_name} {leave.last_name}
-                            </div>
-                            <small className="text-muted">{leave.employee_id}</small>
-                          </td>
-                          <td className="d-none d-md-table-cell">
-                            <Badge bg="secondary" className="small">{leave.leave_type}</Badge>
-                          </td>
-                          <td className="small">
-                            <span className="text-nowrap">{new Date(leave.start_date).toLocaleDateString()}</span>
-                            {leave.start_date !== leave.end_date && (
-                              <span className="text-nowrap d-block">- {new Date(leave.end_date).toLocaleDateString()}</span>
-                            )}
-                          </td>
-                          <td className="small fw-bold">{leave.days_count || 1}</td>
-                          <td className="small">
-                            {leave.applied_date ? new Date(leave.applied_date).toLocaleDateString() : 'N/A'}
-                          </td>
-                          <td>
-                            <Badge bg="warning" className="small">Pending</Badge>
-                          </td>
-                          <td className="text-center">
-                            <Button
-                              variant="outline-primary"
-                              size="sm"
-                              onClick={() => navigate('/admin/leave-requests')}
-                              title="View Details"
-                            >
-                              <FaEye size={12} />
-                            </Button>
-                          </td>
-                        </tr>
+                        <tr key={leave.id}><td className="text-center">{index + 1}</td><td className="small"><div className="text-truncate" style={{ maxWidth: '100px' }}>{leave.first_name} {leave.last_name}</div><small className="text-muted">{leave.employee_id}</small></td><td className="d-none d-md-table-cell"><Badge bg="secondary" className="small">{leave.leave_type}</Badge></td><td className="small">{new Date(leave.start_date).toLocaleDateString()}{leave.start_date !== leave.end_date && <span className="text-nowrap d-block">- {new Date(leave.end_date).toLocaleDateString()}</span>}</td><td className="small fw-bold">{leave.days_count || 1}</td><td><Badge bg="warning" className="small">Pending</Badge></td><td className="text-center"><Button variant="outline-primary" size="sm" onClick={() => navigate('/admin/leave-requests')}><FaEye size={12} /></Button></td></tr>
                       ))
-                    ) : (
-                      <tr>
-                        <td colSpan="8" className="text-center py-4">
-                          <FaCalendarAlt size={30} className="text-muted mb-2 opacity-50" />
-                          <p className="text-muted mb-0">No pending leave requests found</p>
-                          <Button
-                            variant="link"
-                            size="sm"
-                            onClick={() => navigate('/admin/leave-requests')}
-                            className="mt-2"
-                          >
-                            View All Leave Requests →
-                          </Button>
-                        </td>
-                      </tr>
-                    )}
+                    ) : (<tr><td colSpan="7" className="text-center py-4"><FaCalendarAlt size={30} className="text-muted mb-2 opacity-50" /><p className="text-muted mb-0">No pending leave requests found</p></td></tr>)}
                   </tbody>
                 </Table>
               </div>
-              {filteredLeaveRequests.length > 10 && (
-                <div className="p-3 text-center border-top">
-                  <small className="text-muted">
-                    Showing first 10 of {filteredLeaveRequests.length} pending requests
-                  </small>
-                  <Button
-                    variant="link"
-                    size="sm"
-                    onClick={() => navigate('/admin/leave-requests')}
-                    className="ms-2"
-                  >
-                    View All →
-                  </Button>
-                </div>
-              )}
             </Card.Body>
           </Card>
 
           {/* Employee Leave Balances */}
           <Card className="mb-4 border-0 shadow-sm">
             <Card.Header className="bg-white d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center py-3 gap-2">
-              <h5 className="mb-0 d-flex align-items-center">
-                <FaBalanceScale className="me-2 text-dark" />
-                <span>Employee Leave Balances</span>
-              </h5>
-              <div className="d-flex gap-2">
-                <InputGroup size="sm" style={{ width: '250px' }}>
-                  <InputGroup.Text><FaSearch size={12} /></InputGroup.Text>
-                  <Form.Control
-                    type="text"
-                    placeholder="Search by name or ID..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
-                  {searchTerm && (
-                    <Button
-                      variant="outline-secondary"
-                      onClick={() => setSearchTerm('')}
-                      size="sm"
-                    >
-                      <FaTimesCircle size={12} />
-                    </Button>
-                  )}
-                </InputGroup>
-                <Badge bg="light" text="dark" className="px-3 py-2">
-                  {filteredEmployees.length} / {employeeLeaveBalances.length} Employees
-                </Badge>
-              </div>
+              <h5 className="mb-0 d-flex align-items-center"><FaBalanceScale className="me-2 text-dark" /><span>Employee Leave Balances</span></h5>
+              <div className="d-flex gap-2"><InputGroup size="sm" style={{ width: '250px' }}><InputGroup.Text><FaSearch size={12} /></InputGroup.Text><Form.Control type="text" placeholder="Search by name or ID..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></InputGroup><Badge bg="light" text="dark" className="px-3 py-2">{filteredEmployees.length} / {employeeLeaveBalances.length} Employees</Badge></div>
             </Card.Header>
             <Card.Body>
-              {/* Department Filter Row */}
-              <div className="mb-3">
-                <div className="d-flex flex-wrap gap-2 align-items-center">
-                  <small className="text-muted me-2">Filter by Department:</small>
-                  <ButtonGroup size="sm">
-                    <Button
-                      variant={filterDepartment === 'all' ? 'primary' : 'outline-secondary'}
-                      onClick={() => setFilterDepartment('all')}
-                    >
-                      All
-                    </Button>
-                    {departments.filter(d => d !== 'all').map(dept => (
-                      <Button
-                        key={dept}
-                        variant={filterDepartment === dept ? 'primary' : 'outline-secondary'}
-                        onClick={() => setFilterDepartment(dept)}
-                      >
-                        {dept}
-                      </Button>
-                    ))}
-                  </ButtonGroup>
-                  {(searchTerm || filterDepartment !== 'all') && (
-                    <Button
-                      variant="outline-danger"
-                      size="sm"
-                      onClick={() => {
-                        setSearchTerm('');
-                        setFilterDepartment('all');
-                        setSortBy('name');
-                      }}
-                    >
-                      Clear Filters
-                    </Button>
-                  )}
-                </div>
-              </div>
-
+              <div className="mb-3"><div className="d-flex flex-wrap gap-2 align-items-center"><small className="text-muted me-2">Filter by Department:</small><ButtonGroup size="sm"><Button variant={filterDepartment === 'all' ? 'primary' : 'outline-secondary'} onClick={() => setFilterDepartment('all')}>All</Button>{departments.filter(d => d !== 'all').map(dept => (<Button key={dept} variant={filterDepartment === dept ? 'primary' : 'outline-secondary'} onClick={() => setFilterDepartment(dept)}>{dept}</Button>))}</ButtonGroup>{(searchTerm || filterDepartment !== 'all') && <Button variant="outline-danger" size="sm" onClick={() => { setSearchTerm(''); setFilterDepartment('all'); setSortBy('name'); }}>Clear Filters</Button>}</div></div>
               <div className="table-responsive" style={{ maxHeight: '400px', overflowY: 'auto' }}>
                 <Table striped hover size="sm" className="mb-0">
-                  <thead className="bg-light sticky-top" style={{ top: 0, zIndex: 10 }}>
-                    <tr className="small">
-                      <th className="fw-normal text-center">#</th>
-                      <th className="fw-normal" style={{ cursor: 'pointer' }} onClick={() => setSortBy('name')}>
-                        Employee
-                        {sortBy === 'name' && (sortBy === 'name' ? <FaSort className="ms-1" size={10} /> : <FaSort className="ms-1" size={10} />)}
-                      </th>
-                      <th className="fw-normal d-none d-md-table-cell" style={{ cursor: 'pointer' }} onClick={() => setSortBy('department')}>
-                        Department
-                        {sortBy === 'department' && <FaSort className="ms-1" size={10} />}
-                      </th>
-                      <th className="fw-normal">Total Accrued</th>
-                      <th className="fw-normal">Used</th>
-                      <th className="fw-normal" style={{ cursor: 'pointer' }} onClick={() => setSortBy('balance')}>
-                        Available
-                        {sortBy === 'balance' && <FaSort className="ms-1" size={10} />}
-                      </th>
-                      <th className="fw-normal">Status</th>
-                      <th className="fw-normal d-none d-lg-table-cell">Probation</th>
-                    </tr>
-                  </thead>
+                  <thead className="bg-light sticky-top"><tr className="small"><th className="fw-normal text-center">#</th><th className="fw-normal" style={{ cursor: 'pointer' }} onClick={() => setSortBy('name')}>Employee</th><th className="fw-normal d-none d-md-table-cell" style={{ cursor: 'pointer' }} onClick={() => setSortBy('department')}>Department</th><th className="fw-normal">Total Accrued</th><th className="fw-normal">Used</th><th className="fw-normal" style={{ cursor: 'pointer' }} onClick={() => setSortBy('balance')}>Available</th><th className="fw-normal">Status</th><th className="fw-normal d-none d-lg-table-cell">Probation</th></tr></thead>
                   <tbody>
                     {filteredEmployees.length > 0 ? (
                       filteredEmployees.map((emp, index) => {
-                        // Get values from leaveBalance
                         const totalAccrued = parseFloat(emp.leaveBalance?.total_accrued) || 0;
                         const used = parseFloat(emp.leaveBalance?.used) || 0;
                         const available = parseFloat(emp.leaveBalance?.available) || 0;
-                        const monthsCompleted = emp.leaveBalance?.months_completed || 0;
                         const isProbationComplete = emp.leaveBalance?.is_probation_complete || false;
-
-                        // Show appropriate value based on probation status
                         const displayAvailable = isProbationComplete ? available : totalAccrued;
-
-                        let statusColor = 'success';
-                        let statusText = 'Good';
-
-                        if (displayAvailable <= 0) {
-                          statusColor = 'danger';
-                          statusText = 'No Leaves';
-                        } else if (displayAvailable < 3) {
-                          statusColor = 'warning';
-                          statusText = 'Low';
-                        }
-
-                        const isProbation = !isProbationComplete && monthsCompleted < 6;
-
-                        return (
-                          <tr key={emp.id} className={isProbation ? 'table-light' : ''}>
-                            <td className="text-center small">{index + 1}</td>
-                            <td className="small">
-                              <div className="fw-semibold text-truncate" style={{ maxWidth: '150px' }} title={`${emp.first_name} ${emp.last_name}`}>
-                                {emp.first_name} {emp.last_name}
-                              </div>
-                              <small className="text-muted">{emp.employee_id}</small>
-                              {isProbation && (
-                                <Badge bg="info" pill className="ms-1" style={{ fontSize: '8px' }}>
-                                  Probation
-                                </Badge>
-                              )}
-                            </td>
-                            <td className="small d-none d-md-table-cell text-truncate" style={{ maxWidth: '120px' }} title={emp.department}>
-                              {emp.department || 'N/A'}
-                            </td>
-                            <td className="small fw-bold text-primary">
-                              {totalAccrued.toFixed(1)}
-                            </td>
-                            <td className="small text-danger">
-                              {used.toFixed(1)}
-                            </td>
-                            <td className="small">
-                              <Badge bg={statusColor} pill className="px-2 py-1">
-                                {displayAvailable.toFixed(1)}
-                              </Badge>
-                            </td>
-                            <td className="small">
-                              {displayAvailable <= 0 ? (
-                                <Badge bg="danger" pill>No Leaves</Badge>
-                              ) : displayAvailable < 3 ? (
-                                <Badge bg="warning" pill>Low</Badge>
-                              ) : (
-                                <Badge bg="success" pill>Good</Badge>
-                              )}
-                            </td>
-                            <td className="small d-none d-lg-table-cell">
-                              {isProbation ? (
-                                <Badge bg="info" pill>
-                                  {monthsCompleted}/6 months
-                                </Badge>
-                              ) : (
-                                <Badge bg="success" pill>
-                                  Completed
-                                </Badge>
-                              )}
-                            </td>
-                          </tr>
-                        );
+                        let statusColor = 'success', statusText = 'Good';
+                        if (displayAvailable <= 0) { statusColor = 'danger'; statusText = 'No Leaves'; }
+                        else if (displayAvailable < 3) { statusColor = 'warning'; statusText = 'Low'; }
+                        return (<tr key={emp.id}><td className="text-center small">{index + 1}</td><td className="small"><div className="fw-semibold text-truncate" style={{ maxWidth: '150px' }}>{emp.first_name} {emp.last_name}</div><small className="text-muted">{emp.employee_id}</small></td><td className="small d-none d-md-table-cell">{emp.department || 'N/A'}</td><td className="small fw-bold text-primary">{totalAccrued.toFixed(1)}</td><td className="small text-danger">{used.toFixed(1)}</td><td className="small"><Badge bg={statusColor} pill className="px-2 py-1">{displayAvailable.toFixed(1)}</Badge></td><td className="small">{displayAvailable <= 0 ? <Badge bg="danger" pill>No Leaves</Badge> : displayAvailable < 3 ? <Badge bg="warning" pill>Low</Badge> : <Badge bg="success" pill>Good</Badge>}</td><td className="small d-none d-lg-table-cell">{!isProbationComplete ? <Badge bg="info" pill>Probation</Badge> : <Badge bg="success" pill>Completed</Badge>}</td></tr>);
                       })
-                    ) : (
-                      <tr>
-                        <td colSpan="8" className="text-center py-4">
-                          <p className="text-muted mb-0 small">No employees found matching your search</p>
-                        </td>
-                      </tr>
-                    )}
+                    ) : (<tr><td colSpan="8" className="text-center py-4"><p className="text-muted mb-0 small">No employees found</p></td></tr>)}
                   </tbody>
                 </Table>
-              </div>
-
-              {/* Legend */}
-              <div className="mt-3 pt8-2 border-top">
-                <div className="d-flex flex-wrap justify-content-between align-items-center gap-2">
-                  <small className="text-muted">
-                    Showing {filteredEmployees.length} of {employeeLeaveBalances.length} employees
-                  </small>
-                  <div className="d-flex gap-3">
-                    <small className="text-muted">
-                      <Badge bg="success" pill className="me-1">&nbsp;</Badge>
-                      Good Balance (&ge;3 days)
-                    </small>
-                    <small className="text-muted">
-                      <Badge bg="warning" pill className="me-1">&nbsp;</Badge>
-                      Low Balance (&lt;3 days)
-                    </small>
-                    <small className="text-muted">
-                      <Badge bg="danger" pill className="me-1">&nbsp;</Badge>
-                      No Balance (0 days)
-                    </small>
-                  </div>
-                </div>
-                <div className="mt-2 text-center">
-                  <small className="text-muted">
-                    <FaInfoCircle className="me-1" size={10} />
-                    Employees on probation see their Total Accrued leaves (usable after probation completion)
-                  </small>
-                </div>
               </div>
             </Card.Body>
           </Card>
