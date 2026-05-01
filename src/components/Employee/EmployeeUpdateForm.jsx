@@ -6,7 +6,7 @@ import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 import { useAuth } from '../../context/AuthContext';
 import EmployeeDocumentUpload from './EmployeeDocumentUpload';
-import { FaSave, FaArrowLeft, FaUpload } from 'react-icons/fa';
+import { FaSave, FaArrowLeft, FaUpload, FaInfoCircle, FaCreditCard } from 'react-icons/fa';
 
 const EmployeeUpdateForm = () => {
   const { requestId } = useParams();
@@ -20,67 +20,84 @@ const EmployeeUpdateForm = () => {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState('info'); // 'info' or 'documents'
+  const [activeTab, setActiveTab] = useState('info');
 
+  // Check if employee is Team Leader/Manager
+  const isTeamLeaderDesignation = (designation) => {
+    if (!designation) return false;
+    const d = designation.toLowerCase();
+    return d.includes('team leader') || d.includes('team manager') ||
+      d.includes('tl') || d.includes('lead') || d.includes('manager') ||
+      d.includes('head') || d.includes('supervisor');
+  };
 
-const isTeamLeaderDesignation = (designation) => {
-  if (!designation) return false;
-  const d = designation.toLowerCase();
-  return d.includes('team leader') || d.includes('team manager') ||
-         d.includes('tl') || d.includes('lead') || d.includes('manager') ||
-         d.includes('head') || d.includes('supervisor');
-};
+  // Calculate in-hand salary from gross salary (Gross - 200 DT deduction)
+  const calculateInHandSalary = (grossSalary) => {
+    if (!grossSalary || grossSalary === '') return '';
+    const gross = parseFloat(grossSalary);
+    if (isNaN(gross)) return '';
+    const inHand = gross - 200;
+    return inHand.toFixed(2);
+  };
 
-const BASE_EMPLOYMENT_FIELDS = [
+  // Calculate gross salary from in-hand salary (In-hand + 200)
+  const calculateGrossSalary = (inHandSalary) => {
+    if (!inHandSalary || inHandSalary === '') return '';
+    const inHand = parseFloat(inHandSalary);
+    if (isNaN(inHand)) return '';
+    const gross = inHand + 200;
+    return gross.toFixed(2);
+  };
+
+  const BASE_EMPLOYMENT_FIELDS = [
     { name: 'designation', label: 'Designation', type: 'text' },
     { name: 'department', label: 'Department', type: 'text' },
     { name: 'employment_type', label: 'Employment Type', type: 'select', options: ['Full Time', 'Part Time', 'Contract', 'Intern', 'Probation'] },
     { name: 'shift_timing', label: 'Shift Timing', type: 'text', placeholder: 'e.g., 9:00 AM - 6:00 PM' },
     { name: 'reporting_manager', label: 'Reporting Manager', type: 'text' }
-];
+  ];
 
-const fieldGroups = {
-  personal: [
-    { name: 'first_name', label: 'First Name', type: 'text', required: true },
-    { name: 'middle_name', label: 'Middle Name', type: 'text' },
-    { name: 'last_name', label: 'Last Name', type: 'text', required: true },
-    { name: 'dob', label: 'Date of Birth', type: 'date' },
-    { name: 'blood_group', label: 'Blood Group', type: 'select', options: ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'] }
-  ],
-  contact: [
-    { name: 'email', label: 'Email', type: 'email', required: true },
-    { name: 'phone', label: 'Phone', type: 'tel' }
-  ],
-  address: [
-    { name: 'address', label: 'Address', type: 'textarea' },
-    { name: 'city', label: 'City', type: 'text' },
-    { name: 'state', label: 'State', type: 'text' },
-    { name: 'pincode', label: 'Pincode', type: 'text' }
-  ],
-  bank: [
-    { name: 'bank_account_name', label: 'Account Holder Name', type: 'text' },
-    { name: 'account_number', label: 'Account Number', type: 'text' },
-    { name: 'ifsc_code', label: 'IFSC Code', type: 'text' },
-    { name: 'branch_name', label: 'Branch Name', type: 'text' },
-    { name: 'pan_number', label: 'PAN Number', type: 'text' },
-    { name: 'aadhar_number', label: 'Aadhar Card Number', type: 'text', placeholder: '12-digit Aadhar number' }
-  ],
-  employment: BASE_EMPLOYMENT_FIELDS,
-  emergency: [
-    { name: 'emergency_contact', label: 'Emergency Contact Number', type: 'tel' }
-  ],
-  salary: [
-    { name: 'gross_salary', label: 'Gross Salary', type: 'number' },
-    { name: 'in_hand_salary', label: 'In-hand Salary', type: 'number' }
-  ]
-};
-  // Also update the fieldIcons object
+  const fieldGroups = {
+    personal: [
+      { name: 'first_name', label: 'First Name', type: 'text', required: true },
+      { name: 'middle_name', label: 'Middle Name', type: 'text' },
+      { name: 'last_name', label: 'Last Name', type: 'text', required: true },
+      { name: 'dob', label: 'Date of Birth', type: 'date' },
+      { name: 'blood_group', label: 'Blood Group', type: 'select', options: ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'] }
+    ],
+    contact: [
+      { name: 'email', label: 'Email', type: 'email', required: true },
+      { name: 'phone', label: 'Phone', type: 'tel' }
+    ],
+    address: [
+      { name: 'address', label: 'Address', type: 'textarea' },
+      { name: 'city', label: 'City', type: 'text' },
+      { name: 'state', label: 'State', type: 'text' },
+      { name: 'pincode', label: 'Pincode', type: 'text' }
+    ],
+    bank: [
+      { name: 'bank_account_name', label: 'Account Holder Name', type: 'text' },
+      { name: 'account_number', label: 'Account Number', type: 'text' },
+      { name: 'ifsc_code', label: 'IFSC Code', type: 'text' },
+      { name: 'branch_name', label: 'Branch Name', type: 'text' },
+      { name: 'pan_number', label: 'PAN Number', type: 'text' },
+      { name: 'aadhar_number', label: 'Aadhar Card Number', type: 'text', placeholder: '12-digit Aadhar number' }
+    ],
+    employment: BASE_EMPLOYMENT_FIELDS,
+    emergency: [
+      { name: 'emergency_contact', label: 'Emergency Contact Number', type: 'tel' }
+    ],
+    salary: [
+      { name: 'gross_salary', label: 'Gross Salary (Monthly)', type: 'number', placeholder: 'Enter gross salary' },
+      { name: 'in_hand_salary', label: 'In-hand Salary (After DT ₹200)', type: 'number', placeholder: 'Auto-calculated', readOnly: true }
+    ]
+  };
+
   const fieldIcons = {
     personal: { icon: '👤', label: 'Personal Information' },
     contact: { icon: '📞', label: 'Contact Details' },
     address: { icon: '🏠', label: 'Address' },
     bank: { icon: '🏦', label: 'Bank Details' },
-    aadhar: { icon: '🆔', label: 'Aadhar Card' },  // ✅ NEW
     employment: { icon: '💼', label: 'Employment Details' },
     emergency: { icon: '🚑', label: 'Emergency Contact' },
     documents: { icon: '📄', label: 'Documents' },
@@ -128,7 +145,21 @@ const fieldGroups = {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+
+    let newFormData = { ...formData, [name]: value };
+
+    // Auto-calculate in_hand_salary when gross_salary changes
+    if (name === 'gross_salary') {
+      const gross = parseFloat(value);
+      if (!isNaN(gross) && gross > 0) {
+        const inHand = gross - 200; // DT deduction of ₹200
+        newFormData.in_hand_salary = inHand.toFixed(2);
+      } else {
+        newFormData.in_hand_salary = '';
+      }
+    }
+
+    setFormData(newFormData);
   };
 
   const handleInfoSubmit = async (e) => {
@@ -150,6 +181,14 @@ const fieldGroups = {
             });
           }
         });
+      }
+
+      // Ensure in_hand_salary is calculated based on gross_salary before submitting
+      if (updatedData.gross_salary && !updatedData.in_hand_salary) {
+        const gross = parseFloat(updatedData.gross_salary);
+        if (!isNaN(gross)) {
+          updatedData.in_hand_salary = (gross - 200).toFixed(2);
+        }
       }
 
       const response = await axios.post(API_ENDPOINTS.EMPLOYEE_UPDATES_SUBMIT, {
@@ -309,7 +348,21 @@ const fieldGroups = {
                                   placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}`}
                                   required={field.required}
                                   size="sm"
+                                  readOnly={field.readOnly}
+                                  className={field.readOnly ? 'bg-light' : ''}
                                 />
+                              )}
+                              {field.name === 'gross_salary' && (
+                                <Form.Text className="text-muted small d-block mt-1">
+                                  <FaInfoCircle className="me-1" size={10} />
+                                  In-hand salary will be auto-calculated as Gross Salary - ₹200 (DT)
+                                </Form.Text>
+                              )}
+                              {field.name === 'in_hand_salary' && (
+                                <Form.Text className="text-muted small d-block mt-1">
+                                  <FaInfoCircle className="me-1" size={10} />
+                                  Auto-calculated: Gross Salary - ₹200 (Professional Tax)
+                                </Form.Text>
                               )}
                             </Form.Group>
                           </Col>

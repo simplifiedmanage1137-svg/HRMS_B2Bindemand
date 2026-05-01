@@ -163,30 +163,22 @@ const Navbar = () => {
   };
 
   const deleteNotification = async (id, e) => {
-    e.stopPropagation(); // Prevent triggering parent click
+    e.stopPropagation();
     
     try {
-      // Call API to delete notification
       await axios.delete(API_ENDPOINTS.NOTIFICATION_DELETE(id));
-      
-      // Remove from local state
       setNotifications(prev => prev.filter(n => n.id !== id));
-      
-      // Also try to remove from context if available
       if (removeNotification) {
         removeNotification(id);
       }
     } catch (error) {
       console.error('Error deleting notification:', error);
-      
-      // If API fails, at least remove from UI
       setNotifications(prev => prev.filter(n => n.id !== id));
     }
   };
 
   const deleteEventNotification = (eventId, e) => {
     e.stopPropagation();
-    
     if (markEventAsRead) {
       markEventAsRead(eventId);
     }
@@ -206,13 +198,14 @@ const Navbar = () => {
     markEventAsRead(eventId);
   };
 
-  const handleViewUpdateRequests = () => {
+  // FIXED: Navigation handler for Update Requests
+  const handleUpdateRequestsClick = () => {
+    setShowNotifications(false);
     if (user?.role === 'admin') {
-      navigate('/admin/update-requests');
+      navigate('/admin/update-approvals');
     } else {
       navigate('/employee/update-requests');
     }
-    setShowNotifications(false);
   };
 
   const handleLogout = () => {
@@ -309,7 +302,7 @@ const Navbar = () => {
       </div>
       
       <div className="d-flex align-items-center gap-2 gap-sm-3">
-        {/* Time and Date Display - Hidden on very small screens */}
+        {/* Time and Date Display */}
         <div className="d-none d-sm-flex align-items-center" style={{
           backgroundColor: '#f8f9fa',
           borderRadius: '20px',
@@ -325,7 +318,7 @@ const Navbar = () => {
           </span>
         </div>
 
-        {/* Mobile Time - Shown only on extra small screens */}
+        {/* Mobile Time */}
         <div className="d-flex d-sm-none align-items-center" style={{
           backgroundColor: '#f8f9fa',
           borderRadius: '20px',
@@ -366,19 +359,22 @@ const Navbar = () => {
           </Dropdown.Toggle>
 
           <Dropdown.Menu className="dropdown-menu-end">
-            {/* My Profile - Sirf EMPLOYEE ke liye show hoga */}
+            {/* My Profile - Only for EMPLOYEE */}
             {user?.role === 'employee' && (
-              <Dropdown.Item as={Link} to="/profile">
+              <Dropdown.Item onClick={() => navigate('/profile')}>
                 <FaUser className="me-2" /> My Profile
               </Dropdown.Item>
             )}
             
-            {/* Update Requests - Sabke liye (role ke hisaab se different path) */}
-            <Dropdown.Item 
-              as={Link} 
-              to={user?.role === 'admin' ? '/admin/update-requests' : '/employee/update-requests'}
-              className="d-flex align-items-center"
-            >
+            {/* Admin Profile link */}
+            {user?.role === 'admin' && (
+              <Dropdown.Item onClick={() => navigate('/admin/profile')}>
+                <FaUser className="me-2" /> Admin Profile
+              </Dropdown.Item>
+            )}
+            
+            {/* Update Requests - FIXED with onClick handler */}
+            <Dropdown.Item onClick={handleUpdateRequestsClick}>
               <FaEdit className="me-2" /> Update Requests
               {pendingCount > 0 && (
                 <Badge bg="danger" className="ms-2">{pendingCount}</Badge>
@@ -387,7 +383,7 @@ const Navbar = () => {
             
             <Dropdown.Divider />
             
-            {/* Logout - Sabke liye common */}
+            {/* Logout */}
             <Dropdown.Item onClick={handleLogout}>
               <FaSignOutAlt className="me-2" /> Logout
             </Dropdown.Item>
@@ -446,7 +442,7 @@ const Navbar = () => {
                 <Button
                   variant="outline-warning"
                   size="sm"
-                  onClick={handleViewUpdateRequests}
+                  onClick={handleUpdateRequestsClick}
                   className="flex-shrink-0"
                 >
                   View
@@ -535,7 +531,7 @@ const Navbar = () => {
         </div>
       )}
     </nav>
-  );
+  )
 };
 
 export default Navbar;
