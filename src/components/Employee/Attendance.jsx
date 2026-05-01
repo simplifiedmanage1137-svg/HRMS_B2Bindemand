@@ -303,6 +303,14 @@ const Attendance = () => {
     return R * c;
   };
 
+  // Calculate status from total_hours: <5h = absent, 5-8:59h = half_day, 9h+ = present
+  const getStatusFromHours = (totalHours) => {
+    if (!totalHours || totalHours <= 0) return null;
+    if (totalHours < 5) return 'absent';
+    if (totalHours < 9) return 'half_day';
+    return 'present';
+  };
+
   const getAttendanceStatusBadge = (record) => {
     const today = new Date().toISOString().split('T')[0];
     const isToday = record.attendance_date === today;
@@ -318,40 +326,35 @@ const Attendance = () => {
       return <Badge bg="secondary" className="px-2 py-1"><FaClock className="me-1" size={10} /> Not Clocked</Badge>;
     }
 
-    if (record.clock_in && record.clock_out) {
-      if (record.status === 'half_day') {
-        return <Badge bg="warning" className="text-dark px-2 py-1"><FaCloudSun className="me-1" size={10} /> Half Day{lateText}</Badge>;
-      }
-      if (record.late_minutes > 0) {
-        return <Badge bg="warning" className="px-2 py-1 text-dark"><FaExclamationTriangle className="me-1" size={10} /> Late{lateText}</Badge>;
-      }
-      return <Badge bg="success" className="px-2 py-1"><FaCheckCircle className="me-1" size={10} /> Present</Badge>;
-    }
-
+    // Today with active session (no clock out yet)
     if (isToday && record.clock_in && !record.clock_out) {
       if (record.late_minutes > 0) {
-        return <Badge bg="warning" className="px-2 py-1 text-dark"><FaExclamationTriangle className="me-1" size={10} /> Late{lateText}</Badge>;
+        return <Badge bg="warning" className="px-2 py-1 text-dark"><FaExclamationTriangle className="me-1" size={10} /> Working (Late{lateText})</Badge>;
       }
       return <Badge bg="info" className="px-2 py-1"><FaClock className="me-1" size={10} /> Working</Badge>;
     }
 
-    if (record.status === 'present') {
+    // Clock in + clock out: calculate from hours
+    if (record.clock_in && record.clock_out) {
+      const totalHours = parseFloat(record.total_hours) || 0;
+      const hoursStatus = getStatusFromHours(totalHours);
+
+      if (hoursStatus === 'absent') {
+        return <Badge bg="danger" className="px-2 py-1"><FaExclamationTriangle className="me-1" size={10} /> Absent ({totalHours.toFixed(1)}h)</Badge>;
+      }
+      if (hoursStatus === 'half_day') {
+        return <Badge bg="warning" className="text-dark px-2 py-1"><FaCloudSun className="me-1" size={10} /> Half Day{lateText}</Badge>;
+      }
+      // present (9h+)
       if (record.late_minutes > 0) {
-        return <Badge bg="warning" className="px-2 py-1 text-dark"><FaExclamationTriangle className="me-1" size={10} /> Late{lateText}</Badge>;
+        return <Badge bg="warning" className="px-2 py-1 text-dark"><FaExclamationTriangle className="me-1" size={10} /> Present (Late{lateText})</Badge>;
       }
       return <Badge bg="success" className="px-2 py-1"><FaCheckCircle className="me-1" size={10} /> Present</Badge>;
     }
 
-    if (record.status === 'half_day') {
-      return <Badge bg="warning" className="text-dark px-2 py-1"><FaCloudSun className="me-1" size={10} /> Half Day{lateText}</Badge>;
-    }
-
-    if (record.status === 'absent') {
-      return <Badge bg="danger" className="px-2 py-1"><FaExclamationTriangle className="me-1" size={10} /> Absent</Badge>;
-    }
-
-    if (record.is_regularized) {
-      return <Badge bg="info" className="px-2 py-1"><FaCheckCircle className="me-1" size={10} /> Regularized</Badge>;
+    // Clock in but no clock out (not today = missed)
+    if (record.clock_in && !record.clock_out) {
+      return <Badge bg="danger" className="px-2 py-1"><FaExclamationTriangle className="me-1" size={10} /> Missed CO</Badge>;
     }
 
     return <Badge bg="secondary" className="px-2 py-1">Not Clocked</Badge>;
@@ -904,17 +907,28 @@ const Attendance = () => {
     let workingDaysCount = 0;
 
     history.forEach(record => {
-      if (record.isWeeklyOff) {
+      if (record.isWeeklyOff || record.status === 'weekly_off') {
         weeklyOff++;
-      } else if (record.status === 'present') {
-        present++;
+      } else if (record.clock_in && record.clock_out) {
+        // Hours-based calculation
+        const hrs = parseFloat(record.total_hours) || 0;
+        if (hrs >= 9) {
+          present++;
+          workingDaysCount++;
+          totalHours += hrs;
+        } else if (hrs >= 5) {
+          halfDays++;
+          workingDaysCount++;
+          totalHours += hrs;
+        } else {
+          absent++;
+        }
+      } else if (record.clock_in && !record.clock_out) {
+        // Active session (today) — count as working
+        const hrs = parseFloat(record.total_hours) || 0;
+        totalHours += hrs;
         workingDaysCount++;
-        if (record.total_hours) totalHours += parseFloat(record.total_hours);
-      } else if (record.status === 'half_day') {
-        halfDays++;
-        workingDaysCount++;
-        if (record.total_hours) totalHours += parseFloat(record.total_hours);
-      } else if (record.status === 'absent') {
+      } else if (!record.clock_in && !record.isWeeklyOff) {
         absent++;
       }
     });
@@ -992,18 +1006,24 @@ const Attendance = () => {
       let history = response.data.attendance || [];
       const completeHistory = generateLast30DaysAttendance(history);
 
-      const currentYear = today.getFullYear();
-      const currentMonth = today.getMonth();
-      const periodStart = new Date(currentYear, currentMonth, 26);
-      const periodEnd = new Date(currentYear, currentMonth + 1, 25);
+      // Salary cycle: today >= 26 → this month 26 to next month 25
+      //               today < 26  → prev month 26 to this month 25
+      const todayDay = today.getDate();
+      const cycleStart = todayDay >= 26
+        ? new Date(today.getFullYear(), today.getMonth(), 26)
+        : new Date(today.getFullYear(), today.getMonth() - 1, 26);
+      const cycleEnd = todayDay >= 26
+        ? new Date(today.getFullYear(), today.getMonth() + 1, 25)
+        : new Date(today.getFullYear(), today.getMonth(), 25);
+
       const periodHistory = completeHistory.filter(record => {
         const recordDate = new Date(record.date);
-        return recordDate >= periodStart && recordDate <= periodEnd;
+        return recordDate >= cycleStart && recordDate <= cycleEnd;
       });
 
       setAttendanceHistory(completeHistory);
-      calculateMonthlyStats(periodHistory);
-      updateChartData(periodHistory);
+      calculateMonthlyStats(periodHistory.length > 0 ? periodHistory : completeHistory);
+      updateChartData(periodHistory.length > 0 ? periodHistory : completeHistory);
 
     } catch (error) {
       console.error('❌ Error fetching attendance history:', error);

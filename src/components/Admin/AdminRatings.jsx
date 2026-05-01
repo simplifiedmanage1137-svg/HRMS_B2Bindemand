@@ -277,6 +277,7 @@ const AdminRatings = ({ initialMonth, initialYear }) => {
     const renderStars = (rating, interactive = false, onStarClick, onStarHover, onHoverLeave) => {
         const stars = [];
         const numRating = typeof rating === 'number' ? rating : parseFloat(rating);
+
         for (let i = 1; i <= 5; i++) {
             if (interactive) {
                 stars.push(
@@ -503,7 +504,7 @@ const AdminRatings = ({ initialMonth, initialYear }) => {
                 </Col>
             </Row>
 
-            {/* Rating Distribution */}
+            {/* Rating Distribution - Simpler Version */}
             <Card className="border-0 shadow-sm mb-3">
                 <Card.Header className="bg-light py-2">
                     <h6 className="mb-0 small fw-semibold">
@@ -512,16 +513,30 @@ const AdminRatings = ({ initialMonth, initialYear }) => {
                     </h6>
                 </Card.Header>
                 <Card.Body className="p-3">
-                    <Row className="text-center">
+                    <div className="d-flex flex-wrap justify-content-center gap-3">
                         {[1, 2, 3, 4, 5].map(star => (
-                            <Col xs={6} sm={2} md={2} key={star}>
-                                <div className="mb-2">{renderStars(star)}</div>
-                                <Badge bg={getRatingColor(star)} pill>
-                                    {stats.rating_distribution[star] || 0} Ratings
-                                </Badge>
-                            </Col>
+                            <div key={star} className="text-center" style={{ minWidth: '80px' }}>
+                                <div className="mb-1">
+                                    {[1, 2, 3, 4, 5].map(i => (
+                                        <FaStar
+                                            key={i}
+                                            size={18}
+                                            className="me-1"
+                                            color={i <= star ? '#ffc107' : '#e4e5e9'}
+                                        />
+                                    ))}
+                                </div>
+                                <div className="mt-1">
+                                    <Badge bg={getRatingColor(star)} pill>
+                                        {stats.rating_distribution[star] || 0}
+                                    </Badge>
+                                </div>
+                                <small className="text-muted d-block mt-1">
+                                    {star} {star === 1 ? 'Star' : 'Stars'}
+                                </small>
+                            </div>
                         ))}
-                    </Row>
+                    </div>
                 </Card.Body>
             </Card>
 
