@@ -226,18 +226,31 @@ const Attendance = () => {
     try {
       let hourNum, minute;
       if (typeof datetime === 'string') {
-        const spaceIdx = datetime.indexOf(' ');
-        if (spaceIdx !== -1 && !datetime.includes('T')) {
-          const timePart = datetime.substring(spaceIdx + 1);
+        // Handle "YYYY-MM-DD HH:MM:SS" format
+        if (datetime.includes(' ') && !datetime.includes('T')) {
+          const timePart = datetime.split(' ')[1];
           const parts = timePart.split(':');
           hourNum = parseInt(parts[0], 10);
           minute = parts[1] ? parts[1].padStart(2, '0') : '00';
-        } else if (datetime.includes('T')) {
-          const tIdx = datetime.indexOf('T');
-          const timePart = datetime.substring(tIdx + 1, tIdx + 6);
-          const parts = timePart.split(':');
+        }
+        // Handle UTC ISO format
+        else if (datetime.includes('T')) {
+          const date = new Date(datetime);
+          if (!isNaN(date.getTime())) {
+            // Convert to IST
+            const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+            const istDate = new Date(date.getTime() + IST_OFFSET_MS);
+            hourNum = istDate.getUTCHours();
+            minute = String(istDate.getUTCMinutes()).padStart(2, '0');
+          } else {
+            return '--:--';
+          }
+        }
+        // Handle just time string "HH:MM:SS"
+        else if (datetime.match(/^\d{2}:\d{2}:\d{2}$/)) {
+          const parts = datetime.split(':');
           hourNum = parseInt(parts[0], 10);
-          minute = parts[1] ? parts[1].padStart(2, '0') : '00';
+          minute = parts[1];
         } else {
           return '--:--';
         }
@@ -401,12 +414,27 @@ const Attendance = () => {
       let attendanceData = response.data.attendance;
       const serverSession = response.data.active_session;
 
-      console.log('📊 Today attendance from API:', attendanceData);
+      console.log('📊 Today attendance from API (FULL):', JSON.stringify(attendanceData, null, 2));
+      console.log('📊 Attendance data keys:', attendanceData ? Object.keys(attendanceData) : 'No attendance data');
 
       if (attendanceData) {
+        // CRITICAL: Log the raw values
+        console.log('🔍 Raw clock_in_ist:', attendanceData.clock_in_ist);
+        console.log('🔍 Raw clock_in:', attendanceData.clock_in);
+        console.log('🔍 Raw clock_out_ist:', attendanceData.clock_out_ist);
+        console.log('🔍 Raw clock_out:', attendanceData.clock_out);
+
         // Ensure we have both IST and ISO formats
         attendanceData.clock_in = attendanceData.clock_in_ist || attendanceData.clock_in;
         attendanceData.clock_out = attendanceData.clock_out_ist || attendanceData.clock_out;
+
+        // Pre-format for display so card always shows correct time
+        if (attendanceData.clock_in) {
+          attendanceData.clock_in_display = formatTimeIST(attendanceData.clock_in);
+        }
+        if (attendanceData.clock_out) {
+          attendanceData.clock_out_display = formatTimeIST(attendanceData.clock_out);
+        }
 
         // Parse late minutes
         attendanceData.late_minutes = Number(attendanceData.late_minutes) || 0;
@@ -459,19 +487,45 @@ const Attendance = () => {
           if (attendanceData.clock_in && !attendanceData.clock_out) {
             attendanceData.status = 'working';
           } else if (attendanceData.clock_in && attendanceData.clock_out) {
-            // Determine if it's full day or half day based on hours
             const totalHours = attendanceData.total_hours || 0;
-            const shiftTiming = parseShiftTiming(attendanceData.shift_time_used);
-            const expectedHours = shiftTiming.totalHours || 9;
-
-            if (totalHours >= expectedHours) {
+            if (totalHours >= 9) {
               attendanceData.status = 'present';
             } else if (totalHours >= 5) {
               attendanceData.status = 'half_day';
             } else {
-              attendanceData.status = 'present'; // Default to present if hours are good
+              attendanceData.status = 'present';
             }
           }
+        }
+
+        // CRITICAL FIX: Create display versions of times
+        if (attendanceData.clock_in_ist) {
+          attendanceData.clock_in_display = formatTimeIST(attendanceData.clock_in_ist);
+          console.log('✅ Set clock_in_display from clock_in_ist:', attendanceData.clock_in_display);
+        } else if (attendanceData.clock_in) {
+          attendanceData.clock_in_display = formatTimeIST(attendanceData.clock_in);
+          console.log('✅ Set clock_in_display from clock_in:', attendanceData.clock_in_display);
+        }
+
+        if (attendanceData.clock_out_ist) {
+          attendanceData.clock_out_display = formatTimeIST(attendanceData.clock_out_ist);
+          console.log('✅ Set clock_out_display from clock_out_ist:', attendanceData.clock_out_display);
+        } else if (attendanceData.clock_out) {
+          attendanceData.clock_out_display = formatTimeIST(attendanceData.clock_out);
+          console.log('✅ Set clock_out_display from clock_out:', attendanceData.clock_out_display);
+        }
+
+        // If still no display times, check if the raw values exist
+        if (!attendanceData.clock_in_display && attendanceData.clock_in_ist) {
+          // Try to parse manually
+          const timeStr = attendanceData.clock_in_ist.split(' ')[1];
+          const parts = timeStr.split(':');
+          const hourNum = parseInt(parts[0], 10);
+          const minute = parts[1];
+          const ampm = hourNum >= 12 ? 'PM' : 'AM';
+          const hour12 = hourNum % 12 === 0 ? 12 : hourNum % 12;
+          attendanceData.clock_in_display = `${hour12}:${minute} ${ampm}`;
+          console.log('✅ Manual clock_in_display:', attendanceData.clock_in_display);
         }
 
         // Update state
@@ -483,6 +537,9 @@ const Attendance = () => {
         } else {
           setHasClockedOutToday(false);
         }
+      } else {
+        console.log('⚠️ No attendance data for today');
+        setAttendance(null);
       }
 
       // Handle server session
@@ -511,12 +568,10 @@ const Attendance = () => {
 
       // Set up real-time interval for updating working hours every minute
       if (attendanceData?.clock_in && !attendanceData?.clock_out) {
-        // Clear any existing interval first
         if (window.realTimeInterval) {
           clearInterval(window.realTimeInterval);
         }
 
-        // Create new interval
         window.realTimeInterval = setInterval(() => {
           const clockInStr = attendanceData.clock_in_ist || attendanceData.clock_in;
           const currentTimeIST = nowIST();
@@ -527,9 +582,6 @@ const Attendance = () => {
             const minutes = Math.round(totalMinutes % 60);
             const totalHoursDisplay = `${hours}h ${minutes}m`;
 
-            console.log(`🔄 Real-time update: ${totalHoursDisplay} (${totalMinutes} mins)`);
-
-            // Update attendance state
             setAttendance(prev => ({
               ...prev,
               total_hours_display: totalHoursDisplay,
@@ -537,26 +589,9 @@ const Attendance = () => {
               total_minutes: Math.round(totalMinutes),
               current_hours_display: totalHoursDisplay
             }));
-
-            // Also update in attendance history for today's record
-            setAttendanceHistory(prevHistory => {
-              const todayDateStr = formatDateStr(new Date());
-              return prevHistory.map(record => {
-                if (record.attendance_date === todayDateStr && record.isToday) {
-                  return {
-                    ...record,
-                    total_hours_display: totalHoursDisplay,
-                    total_hours: parseFloat((totalMinutes / 60).toFixed(2)),
-                    current_hours_display: totalHoursDisplay
-                  };
-                }
-                return record;
-              });
-            });
           }
-        }, 60000); // Update every minute
+        }, 60000);
 
-        // Store interval ID for cleanup
         return () => {
           if (window.realTimeInterval) {
             clearInterval(window.realTimeInterval);
@@ -564,7 +599,6 @@ const Attendance = () => {
           }
         };
       } else {
-        // Clear interval if no active session
         if (window.realTimeInterval) {
           clearInterval(window.realTimeInterval);
           window.realTimeInterval = null;
@@ -576,7 +610,6 @@ const Attendance = () => {
       console.error('❌ Error fetching today attendance:', error);
       console.error('Error details:', error.response?.data);
 
-      // Clear interval on error
       if (window.realTimeInterval) {
         clearInterval(window.realTimeInterval);
         window.realTimeInterval = null;
@@ -1005,6 +1038,29 @@ const Attendance = () => {
 
       let history = response.data.attendance || [];
       const completeHistory = generateLast30DaysAttendance(history);
+
+      // Sync today's attendance to state if not already set
+      const todayStr = formatDate(today);
+      const todayRecord = history.find(r => r.attendance_date === todayStr);
+      if (todayRecord && todayRecord.clock_in) {
+        setAttendance(prev => {
+          // Only update if not already set or missing display fields
+          if (!prev || !prev.clock_in_display) {
+            const clockIn = todayRecord.clock_in_ist || todayRecord.clock_in;
+            const clockOut = todayRecord.clock_out_ist || todayRecord.clock_out;
+            return {
+              ...todayRecord,
+              clock_in: clockIn,
+              clock_out: clockOut,
+              clock_in_display: clockIn ? formatTimeIST(clockIn) : null,
+              clock_out_display: clockOut ? formatTimeIST(clockOut) : null,
+              late_minutes: Number(todayRecord.late_minutes) || 0,
+              late_display: todayRecord.late_display || null
+            };
+          }
+          return prev;
+        });
+      }
 
       // Salary cycle: today >= 26 → this month 26 to next month 25
       //               today < 26  → prev month 26 to this month 25
@@ -1728,7 +1784,9 @@ const Attendance = () => {
                 <Col xs={6} className="text-center">
                   <small className="text-muted d-block">Clock In</small>
                   <strong className={attendance?.clock_in ? 'text-success' : 'text-muted'}>
-                    {attendance ? formatTimeIST(attendance.clock_in_ist || attendance.clock_in) : '--:--'}
+                    {attendance?.clock_in
+                      ? (attendance.clock_in_display || formatTimeIST(attendance.clock_in_ist || attendance.clock_in))
+                      : '--:--'}
                   </strong>
                   {attendance?.late_display && attendance.late_minutes > 0 && (
                     <small className="text-danger d-block" style={{ fontSize: '10px' }}>
@@ -1740,7 +1798,9 @@ const Attendance = () => {
                 <Col xs={6} className="text-center">
                   <small className="text-muted d-block">Clock Out</small>
                   <strong className={attendance?.clock_out ? 'text-warning' : 'text-muted'}>
-                    {attendance ? formatTimeIST(attendance.clock_out_ist || attendance.clock_out) : '--:--'}
+                    {attendance?.clock_out
+                      ? (attendance.clock_out_display || formatTimeIST(attendance.clock_out_ist || attendance.clock_out))
+                      : '--:--'}
                   </strong>
                   {attendance?.total_hours_display && (
                     <small className="text-success d-block" style={{ fontSize: '10px' }}>
