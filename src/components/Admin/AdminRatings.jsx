@@ -25,14 +25,14 @@ import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
 import * as XLSX from 'xlsx';
 
-const AdminRatings = () => {
+const AdminRatings = ({ initialMonth, initialYear }) => {
     const [ratings, setRatings] = useState([]);
     const [allEmployees, setAllEmployees] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedRating, setSelectedRating] = useState(null);
     const [showDetailsModal, setShowDetailsModal] = useState(false);
-    const [filterMonth, setFilterMonth] = useState(new Date().getMonth() + 1);
-    const [filterYear, setFilterYear] = useState(new Date().getFullYear());
+    const [filterMonth, setFilterMonth] = useState(initialMonth || new Date().getMonth() + 1);
+    const [filterYear, setFilterYear] = useState(initialYear || new Date().getFullYear());
     const [filterEmployee, setFilterEmployee] = useState('');
     const [filterType, setFilterType] = useState('all');
     const [message, setMessage] = useState({ type: '', text: '' });
@@ -44,7 +44,7 @@ const AdminRatings = () => {
         rating_distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }
     });
 
-    // Admin rating states - Table view instead of dropdown
+    // Admin rating states
     const [showAdminRatingModal, setShowAdminRatingModal] = useState(false);
     const [selectedEmployeeForAdmin, setSelectedEmployeeForAdmin] = useState(null);
     const [adminRating, setAdminRating] = useState(0);
@@ -65,45 +65,173 @@ const AdminRatings = () => {
     ];
 
     const years = [];
-    for (let i = 2023; i <= new Date().getFullYear(); i++) {
+    for (let i = 2023; i <= new Date().getFullYear() + 1; i++) {
         years.push(i);
     }
 
     useEffect(() => {
+        console.log('AdminRatings mounted/updated with:', {
+            filterMonth,
+            filterYear,
+            filterEmployee,
+            filterType
+        });
         fetchEmployees();
         fetchRatings();
     }, [filterMonth, filterYear, filterEmployee, filterType]);
 
     const fetchEmployees = async () => {
         try {
+            console.log('Fetching employees...');
             const response = await axios.get(API_ENDPOINTS.EMPLOYEES);
-            setAllEmployees(response.data || []);
-            const depts = ['all', ...new Set(response.data.map(emp => emp.department).filter(Boolean))];
+            console.log('Employees response:', response.data);
+            const employees = response.data || [];
+            setAllEmployees(employees);
+            const depts = ['all', ...new Set(employees.map(emp => emp.department).filter(Boolean))];
             setDepartments(depts);
         } catch (error) {
             console.error('Error fetching employees:', error);
+            setMessage({ type: 'danger', text: 'Failed to load employees: ' + (error.response?.data?.message || error.message) });
         }
     };
 
     const fetchRatings = async () => {
         try {
             setLoading(true);
-            let url = `${API_ENDPOINTS.RATINGS}/all?month=${filterMonth}&year=${filterYear}`;
-            if (filterEmployee) {
-                url += `&employee_id=${filterEmployee}`;
-            }
-            if (filterType !== 'all') {
-                url += `&rating_type=${filterType}`;
+
+            // Build URL with query parameters
+            let url = `${API_ENDPOINTS.RATINGS}/all`;
+            const params = new URLSearchParams();
+
+            // Add filters only if they exist and are valid
+            if (filterMonth && filterYear) {
+                params.append('month', filterMonth);
+                params.append('year', filterYear);
+                console.log('Filtering by month/year:', filterMonth, filterYear);
+            } else {
+                console.log('No month/year filter applied - fetching all ratings');
             }
 
+            if (filterEmployee) {
+                params.append('employee_id', filterEmployee);
+                console.log('Filtering by employee:', filterEmployee);
+            }
+
+            if (filterType && filterType !== 'all') {
+                params.append('rating_type', filterType);
+                console.log('Filtering by rating type:', filterType);
+            }
+
+            // Append params to URL if any exist
+            const queryString = params.toString();
+            if (queryString) {
+                url += `?${queryString}`;
+            }
+
+            console.log('=== FETCHING RATINGS ===');
+            console.log('Full URL:', url);
+            console.log('Current filters:', {
+                filterMonth,
+                filterYear,
+                filterEmployee,
+                filterType
+            });
+
+            // Make the API call
             const response = await axios.get(url);
+
+            console.log('Response status:', response.status);
+            console.log('Response data:', response.data);
+
+            // Check if response is successful
             if (response.data.success) {
-                setRatings(response.data.ratings || []);
-                calculateStats(response.data.ratings || []);
+                const ratingsData = response.data.ratings || [];
+                console.log(`✅ Successfully fetched ${ratingsData.length} ratings`);
+
+                // Log detailed information about each rating for debugging
+                if (ratingsData.length > 0) {
+                    console.log('📊 Rating Details:');
+                    ratingsData.forEach((rating, idx) => {
+                        console.log(`  Rating ${idx + 1}:`, {
+                            id: rating.id,
+                            employee_name: rating.employee_name,
+                            employee_id: rating.employee_id,
+                            rating: rating.rating,
+                            rating_label: rating.rating_label,
+                            month: rating.month,
+                            year: rating.year,
+                            month_name: rating.month_name,
+                            rater_name: rating.rater_name,
+                            rater_role: rating.rater_role,
+                            comments: rating.comments?.substring(0, 50) || 'No comments'
+                        });
+                    });
+
+                    // Calculate statistics
+                    calculateStats(ratingsData);
+                    setRatings(ratingsData);
+
+                    // Show success message if needed
+                    if (ratingsData.length === 0) {
+                        setMessage({
+                            type: 'info',
+                            text: `No ratings found for ${months.find(m => m.value === filterMonth)?.label || ''} ${filterYear || ''}. Try changing the filters or add new ratings.`
+                        });
+                    } else {
+                        setMessage({ type: 'success', text: `Found ${ratingsData.length} rating(s)` });
+                        setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+                    }
+                } else {
+                    console.warn('⚠️ No ratings found in response');
+                    setRatings([]);
+                    setStats({
+                        total_ratings: 0,
+                        manager_ratings: 0,
+                        admin_ratings: 0,
+                        average_rating: 0,
+                        rating_distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }
+                    });
+                    setMessage({
+                        type: 'info',
+                        text: `No ratings found. Please check your filters or add some ratings.`
+                    });
+                }
+            } else {
+                console.error('❌ API returned success=false:', response.data);
+                setMessage({
+                    type: 'danger',
+                    text: response.data.message || 'Failed to load ratings'
+                });
+                setRatings([]);
             }
         } catch (error) {
-            console.error('Error fetching ratings:', error);
-            setMessage({ type: 'danger', text: 'Failed to load ratings' });
+            console.error('❌ Error fetching ratings:', error);
+            console.error('Error details:', {
+                message: error.message,
+                response: error.response?.data,
+                status: error.response?.status,
+                statusText: error.response?.statusText
+            });
+
+            // Provide user-friendly error message
+            let errorMessage = 'Failed to load ratings. ';
+            if (error.response?.status === 401) {
+                errorMessage += 'Please login again.';
+            } else if (error.response?.status === 403) {
+                errorMessage += 'You don\'t have permission to view ratings.';
+            } else if (error.response?.status === 404) {
+                errorMessage += 'API endpoint not found. Please check server configuration.';
+            } else if (error.code === 'ERR_NETWORK') {
+                errorMessage += 'Cannot connect to server. Please check if the server is running.';
+            } else {
+                errorMessage += error.response?.data?.message || error.message;
+            }
+
+            setMessage({
+                type: 'danger',
+                text: errorMessage
+            });
+            setRatings([]);
         } finally {
             setLoading(false);
         }
@@ -148,6 +276,7 @@ const AdminRatings = () => {
 
     const renderStars = (rating, interactive = false, onStarClick, onStarHover, onHoverLeave) => {
         const stars = [];
+        const numRating = typeof rating === 'number' ? rating : parseFloat(rating);
         for (let i = 1; i <= 5; i++) {
             if (interactive) {
                 stars.push(
@@ -171,7 +300,7 @@ const AdminRatings = () => {
                         key={i}
                         size={14}
                         className="me-1"
-                        style={{ color: i <= rating ? '#ffc107' : '#e4e5e9' }}
+                        style={{ color: i <= numRating ? '#ffc107' : '#e4e5e9' }}
                     />
                 );
             }
@@ -209,31 +338,42 @@ const AdminRatings = () => {
     };
 
     const clearFilters = () => {
+        console.log('Clearing all filters');
         setFilterMonth(new Date().getMonth() + 1);
         setFilterYear(new Date().getFullYear());
         setFilterEmployee('');
         setFilterType('all');
+        setEmployeeSearchTerm('');
+        setEmployeeDepartmentFilter('all');
+        setMessage({ type: '', text: '' });
     };
 
-    // Get current month and year for rating
     const currentMonth = new Date().getMonth() + 1;
     const currentYear = new Date().getFullYear();
     const monthName = new Date().toLocaleString('default', { month: 'long' });
 
-    // Check if employee already has admin rating for current month
     const hasAdminRatingForCurrentMonth = (employeeId) => {
-        return ratings.some(r => r.employee_id === employeeId && r.rater_role === 'Admin' && r.month === filterMonth && r.year === filterYear);
+        return ratings.some(r =>
+            r.employee_id === employeeId &&
+            r.rater_role === 'Admin' &&
+            r.month === filterMonth &&
+            r.year === filterYear
+        );
     };
 
     const handleOpenAdminRatingModal = (employee) => {
-        // Reset form
         setSelectedEmployeeForAdmin(employee);
         setAdminRating(0);
         setHoverAdminRating(0);
         setAdminComments('');
 
-        // Check if already rated this month
-        const existingRating = ratings.find(r => r.employee_id === employee.employee_id && r.rater_role === 'Admin' && r.month === filterMonth && r.year === filterYear);
+        const existingRating = ratings.find(r =>
+            r.employee_id === employee.employee_id &&
+            r.rater_role === 'Admin' &&
+            r.month === filterMonth &&
+            r.year === filterYear
+        );
+
         if (existingRating) {
             setAdminRating(existingRating.rating);
             setAdminComments(existingRating.comments || '');
@@ -254,7 +394,6 @@ const AdminRatings = () => {
 
         setSubmittingAdminRating(true);
         try {
-            // Always use admin-rate endpoint - it handles both insert and update
             const response = await axios.post(`${API_ENDPOINTS.RATINGS}/admin-rate`, {
                 employee_id: selectedEmployeeForAdmin.employee_id,
                 rating: adminRating,
@@ -284,82 +423,6 @@ const AdminRatings = () => {
         }
     };
 
-    // In ratingController.js - Update adminRateEmployee function
-    const adminRateEmployee = async (req, res) => {
-        try {
-            const { employee_id, rating, comments, rating_month, rating_year } = req.body;
-            const adminId = req.user?.employeeId;
-            const userRole = req.user?.role;
-
-            if (userRole !== 'admin') {
-                return res.status(403).json({ success: false, message: 'Only admins can use this endpoint' });
-            }
-
-            if (!employee_id || !rating || rating < 1 || rating > 5) {
-                return res.status(400).json({ success: false, message: 'Valid rating (1-5) is required' });
-            }
-
-            const month = rating_month || new Date().getMonth() + 1;
-            const year = rating_year || new Date().getFullYear();
-
-            // Check if admin already rated this employee this month
-            const { data: existingRating, error: checkError } = await supabase
-                .from('employee_ratings')
-                .select('id')
-                .eq('employee_id', employee_id)
-                .eq('rating_month', month)
-                .eq('rating_year', year)
-                .eq('rated_by_role', 'admin')
-                .maybeSingle();
-
-            let result;
-
-            if (existingRating) {
-                // Update existing rating
-                const { data, error } = await supabase
-                    .from('employee_ratings')
-                    .update({
-                        rating,
-                        comments,
-                        updated_at: new Date()
-                    })
-                    .eq('id', existingRating.id)
-                    .select();
-
-                if (error) throw error;
-                result = data;
-            } else {
-                // Insert new rating
-                const { data, error } = await supabase
-                    .from('employee_ratings')
-                    .insert([{
-                        employee_id,
-                        manager_id: adminId,
-                        rating,
-                        comments,
-                        rating_month: month,
-                        rating_year: year,
-                        rated_by_role: 'admin'
-                    }])
-                    .select();
-
-                if (error) throw error;
-                result = data;
-            }
-
-            res.json({
-                success: true,
-                message: existingRating ? 'Admin rating updated successfully' : 'Admin rating submitted successfully',
-                rating: result[0]
-            });
-
-        } catch (error) {
-            console.error('Error submitting admin rating:', error);
-            res.status(500).json({ success: false, message: error.message });
-        }
-    };
-
-    // Filter employees for the table
     const filteredEmployees = allEmployees.filter(emp => {
         if (employeeSearchTerm) {
             const search = employeeSearchTerm.toLowerCase();
@@ -374,37 +437,29 @@ const AdminRatings = () => {
         return true;
     });
 
-    if (loading) {
+    // Show loading state
+    if (loading && ratings.length === 0 && allEmployees.length === 0) {
         return (
             <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '400px' }}>
                 <Spinner animation="border" variant="primary" />
+                <span className="ms-3">Loading ratings data...</span>
             </div>
         );
     }
 
     return (
-        <div className="p-2 p-md-3 p-lg-4">
-            {/* Header */}
-            <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
-                <div>
-                    <h5 className="mb-1 d-flex align-items-center">
-                        <FaStar className="me-2 text-warning" />
-                        Employee Performance Ratings
-                    </h5>
-                    <p className="text-muted mb-0 small">
-                        View and manage employee ratings from managers and admins
-                    </p>
-                </div>
-                <div className="d-flex gap-2">
-                    <Button variant="success" size="sm" onClick={handleExportExcel}>
-                        <FaDownload className="me-1" size={12} /> Export Report
-                    </Button>
-                </div>
-            </div>
-
+        <div className="mt-3">
             {message.text && (
                 <Alert variant={message.type} dismissible onClose={() => setMessage({ type: '', text: '' })} className="mb-3">
                     {message.text}
+                </Alert>
+            )}
+
+            {/* Info Alert if no data */}
+            {ratings.length === 0 && !loading && (
+                <Alert variant="info" className="mb-3">
+                    <FaInfoCircle className="me-2" />
+                    No ratings found for {months.find(m => m.value === filterMonth)?.label} {filterYear}. Try changing the month/year filter or add some ratings.
                 </Alert>
             )}
 
@@ -459,7 +514,7 @@ const AdminRatings = () => {
                 <Card.Body className="p-3">
                     <Row className="text-center">
                         {[1, 2, 3, 4, 5].map(star => (
-                            <Col xs={6} sm={2.4} md={2.4} key={star}>
+                            <Col xs={6} sm={2} md={2} key={star}>
                                 <div className="mb-2">{renderStars(star)}</div>
                                 <Badge bg={getRatingColor(star)} pill>
                                     {stats.rating_distribution[star] || 0} Ratings
@@ -478,9 +533,10 @@ const AdminRatings = () => {
                             <Form.Label className="small text-muted mb-1">Month</Form.Label>
                             <Form.Select
                                 size="sm"
-                                value={filterMonth}
-                                onChange={(e) => setFilterMonth(parseInt(e.target.value))}
+                                value={filterMonth || ''}
+                                onChange={(e) => setFilterMonth(e.target.value ? parseInt(e.target.value) : null)}
                             >
+                                <option value="">All Months</option>
                                 {months.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
                             </Form.Select>
                         </Col>
@@ -488,9 +544,10 @@ const AdminRatings = () => {
                             <Form.Label className="small text-muted mb-1">Year</Form.Label>
                             <Form.Select
                                 size="sm"
-                                value={filterYear}
-                                onChange={(e) => setFilterYear(parseInt(e.target.value))}
+                                value={filterYear || ''}
+                                onChange={(e) => setFilterYear(e.target.value ? parseInt(e.target.value) : null)}
                             >
+                                <option value="">All Years</option>
                                 {years.map(y => <option key={y} value={y}>{y}</option>)}
                             </Form.Select>
                         </Col>
@@ -522,6 +579,19 @@ const AdminRatings = () => {
                             </Form.Select>
                         </Col>
                         <Col xs={12} md={2}>
+                            <Button
+                                variant="outline-info"
+                                size="sm"
+                                onClick={() => {
+                                    setFilterMonth(null);
+                                    setFilterYear(null);
+                                    setFilterEmployee('');
+                                    setFilterType('all');
+                                }}
+                                className="w-100 mb-2"
+                            >
+                                <FaEye className="me-1" size={12} /> Show All
+                            </Button>
                             <Button variant="outline-secondary" size="sm" onClick={clearFilters} className="w-100">
                                 <FaFilter className="me-1" size={12} /> Clear Filters
                             </Button>
@@ -535,7 +605,7 @@ const AdminRatings = () => {
                 <Card.Header className="bg-primary text-white py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <h6 className="mb-0 small fw-semibold">
                         <FaUserCog className="me-2" />
-                        Rate Employees (Admin)
+                        Rate Employees (Admin) - {months.find(m => m.value === filterMonth)?.label} {filterYear}
                     </h6>
                     <Badge bg="light" text="dark" pill>{filteredEmployees.length} Employees</Badge>
                 </Card.Header>
@@ -595,7 +665,12 @@ const AdminRatings = () => {
                                 {filteredEmployees.length > 0 ? (
                                     filteredEmployees.map((employee, index) => {
                                         const hasRating = hasAdminRatingForCurrentMonth(employee.employee_id);
-                                        const existingRating = ratings.find(r => r.employee_id === employee.employee_id && r.rater_role === 'Admin' && r.month === filterMonth && r.year === filterYear);
+                                        const existingRating = ratings.find(r =>
+                                            r.employee_id === employee.employee_id &&
+                                            r.rater_role === 'Admin' &&
+                                            r.month === filterMonth &&
+                                            r.year === filterYear
+                                        );
 
                                         return (
                                             <tr key={employee.employee_id}>
@@ -653,7 +728,15 @@ const AdminRatings = () => {
                         <FaStar className="me-2 text-warning" />
                         Rating History - {months.find(m => m.value === filterMonth)?.label} {filterYear}
                     </h6>
-                    <Badge bg="secondary" pill>{ratings.length} Records</Badge>
+                    <div className="d-flex gap-2">
+                        <Button variant="success" size="sm" onClick={handleExportExcel} disabled={ratings.length === 0}>
+                            <FaDownload className="me-1" size={12} /> Export
+                        </Button>
+                        <Button variant="outline-primary" size="sm" onClick={fetchRatings}>
+                            <FaSyncAlt className="me-1" size={12} /> Refresh
+                        </Button>
+                        <Badge bg="secondary" pill>{ratings.length} Records</Badge>
+                    </div>
                 </Card.Header>
                 <Card.Body className="p-0">
                     <div className="table-responsive" style={{ maxHeight: '400px', overflow: 'auto' }}>
@@ -672,7 +755,7 @@ const AdminRatings = () => {
                             <tbody>
                                 {ratings.length > 0 ? (
                                     ratings.map((rating, index) => (
-                                        <tr key={rating.id}>
+                                        <tr key={rating.id || index}>
                                             <td className="small text-center">{index + 1}</td>
                                             <td className="small">
                                                 <div className="fw-semibold">{rating.employee_name}</div>
@@ -714,7 +797,10 @@ const AdminRatings = () => {
                                     <tr>
                                         <td colSpan="7" className="text-center py-4">
                                             <FaStar size={40} className="text-muted mb-2 opacity-50" />
-                                            <p className="text-muted mb-0">No ratings found</p>
+                                            <p className="text-muted mb-0">No ratings found for {months.find(m => m.value === filterMonth)?.label} {filterYear}</p>
+                                            <Button variant="link" size="sm" onClick={fetchRatings} className="mt-2">
+                                                <FaSyncAlt className="me-1" /> Refresh
+                                            </Button>
                                         </td>
                                     </tr>
                                 )}
@@ -724,12 +810,13 @@ const AdminRatings = () => {
                 </Card.Body>
             </Card>
 
-            {/* Admin Rating Modal */}
+            {/* Admin Rating Modal - Keep as is */}
             <Modal show={showAdminRatingModal} onHide={() => setShowAdminRatingModal(false)} centered size="lg">
+                {/* Modal content - keep same */}
                 <Modal.Header closeButton className="bg-primary text-white">
                     <Modal.Title className="h6">
                         <FaUserCog className="me-2" />
-                        {selectedEmployeeForAdmin ? `Rate ${selectedEmployeeForAdmin.first_name} ${selectedEmployeeForAdmin.last_name}` : 'Rate Employee'} - {monthName} {filterYear}
+                        {selectedEmployeeForAdmin ? `Rate ${selectedEmployeeForAdmin.first_name} ${selectedEmployeeForAdmin.last_name}` : 'Rate Employee'} - {months.find(m => m.value === filterMonth)?.label} {filterYear}
                     </Modal.Title>
                 </Modal.Header>
                 <Modal.Body className="p-4">
@@ -755,27 +842,21 @@ const AdminRatings = () => {
                             <Form.Group className="mb-4">
                                 <Form.Label className="fw-semibold">Rating *</Form.Label>
                                 <div className="d-flex align-items-center">
-                                    {(() => {
-                                        const stars = [];
-                                        for (let i = 1; i <= 5; i++) {
-                                            stars.push(
-                                                <FaStar
-                                                    key={i}
-                                                    size={24}
-                                                    className="me-1"
-                                                    style={{
-                                                        cursor: 'pointer',
-                                                        color: (hoverAdminRating >= i || adminRating >= i) ? '#ffc107' : '#e4e5e9',
-                                                        transition: 'all 0.2s ease'
-                                                    }}
-                                                    onClick={() => setAdminRating(i)}
-                                                    onMouseEnter={() => setHoverAdminRating(i)}
-                                                    onMouseLeave={() => setHoverAdminRating(0)}
-                                                />
-                                            );
-                                        }
-                                        return stars;
-                                    })()}
+                                    {[1, 2, 3, 4, 5].map(i => (
+                                        <FaStar
+                                            key={i}
+                                            size={24}
+                                            className="me-1"
+                                            style={{
+                                                cursor: 'pointer',
+                                                color: (hoverAdminRating >= i || adminRating >= i) ? '#ffc107' : '#e4e5e9',
+                                                transition: 'all 0.2s ease'
+                                            }}
+                                            onClick={() => setAdminRating(i)}
+                                            onMouseEnter={() => setHoverAdminRating(i)}
+                                            onMouseLeave={() => setHoverAdminRating(0)}
+                                        />
+                                    ))}
                                     <span className="ms-3 text-muted">
                                         {adminRating > 0 && `(${getRatingLabel(adminRating)})`}
                                     </span>
@@ -804,22 +885,15 @@ const AdminRatings = () => {
                     )}
                 </Modal.Body>
                 <Modal.Footer>
-                    <Button variant="secondary" size="sm" onClick={() => setShowAdminRatingModal(false)}>
-                        Cancel
-                    </Button>
-                    <Button
-                        variant="primary"
-                        size="sm"
-                        onClick={handleSubmitAdminRating}
-                        disabled={submittingAdminRating || adminRating === 0}
-                    >
+                    <Button variant="secondary" size="sm" onClick={() => setShowAdminRatingModal(false)}>Cancel</Button>
+                    <Button variant="primary" size="sm" onClick={handleSubmitAdminRating} disabled={submittingAdminRating || adminRating === 0}>
                         {submittingAdminRating ? <Spinner size="sm" animation="border" className="me-2" /> : <FaSave className="me-2" />}
                         {selectedEmployeeForAdmin && hasAdminRatingForCurrentMonth(selectedEmployeeForAdmin.employee_id) ? 'Update Rating' : 'Submit Rating'}
                     </Button>
                 </Modal.Footer>
             </Modal>
 
-            {/* Rating Details Modal */}
+            {/* Rating Details Modal - Keep as is */}
             <Modal show={showDetailsModal} onHide={() => setShowDetailsModal(false)} centered size="lg">
                 <Modal.Header closeButton className={`bg-${selectedRating ? getRatingColor(selectedRating.rating) : 'primary'} text-white`}>
                     <Modal.Title className="h6">
