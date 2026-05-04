@@ -161,12 +161,36 @@ const AttendanceReports = () => {
   };
 
   const formatShortTime = (datetime) => {
-    const parsed = parseDateTime(datetime);
-    if (!parsed) return '-';
-    return parsed.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    if (!datetime) return '-';
+
+    try {
+      let hourNum, minute;
+
+      // If it's already IST string format "YYYY-MM-DD HH:MM:SS"
+      if (typeof datetime === 'string' && datetime.includes(' ') && !datetime.includes('T')) {
+        const timePart = datetime.split(' ')[1];
+        const parts = timePart.split(':');
+        hourNum = parseInt(parts[0], 10);
+        minute = parts[1];
+
+        if (!isNaN(hourNum)) {
+          const ampm = hourNum >= 12 ? 'PM' : 'AM';
+          const hour12 = hourNum % 12 === 0 ? 12 : hourNum % 12;
+          return `${hour12}:${minute}`;
+        }
+      }
+
+      // Handle Date object or ISO string
+      const parsed = parseDateTime(datetime);
+      if (!parsed) return '-';
+
+      return parsed.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (error) {
+      return '-';
+    }
   };
 
   const formatDate = (dateString) => {
@@ -298,23 +322,56 @@ const AttendanceReports = () => {
     }
   };
 
-  // Salary cycle: selected month 26th → next month 25th
-  const getSalaryCycle = (month, year) => {
-    // e.g. selected month=4 (April) → cycle: Apr 26 – May 25
-    const cycleStart = new Date(year, month - 1, 26); // selected month 26th
-    let cycleEnd;
-    if (month === 12) {
-      cycleEnd = new Date(year + 1, 0, 25); // next year Jan 25
+  // Helper function to calculate total minutes between two times
+  const calculateTotalMinutes = (clockIn, clockOut) => {
+    if (!clockIn || !clockOut) return 0;
+
+    let clockInTime, clockOutTime;
+
+    if (typeof clockIn === 'string' && clockIn.includes(' ')) {
+      const [inDatePart, inTimePart] = clockIn.split(' ');
+      const [inYear, inMonth, inDay] = inDatePart.split('-');
+      const [inHour, inMinute] = inTimePart.split(':');
+      clockInTime = new Date(inYear, inMonth - 1, inDay, inHour, inMinute);
     } else {
-      cycleEnd = new Date(year, month, 25); // next month 25th
+      clockInTime = new Date(clockIn);
     }
+
+    if (typeof clockOut === 'string' && clockOut.includes(' ')) {
+      const [outDatePart, outTimePart] = clockOut.split(' ');
+      const [outYear, outMonth, outDay] = outDatePart.split('-');
+      const [outHour, outMinute] = outTimePart.split(':');
+      clockOutTime = new Date(outYear, outMonth - 1, outDay, outHour, outMinute);
+    } else {
+      clockOutTime = new Date(clockOut);
+    }
+
+    if (clockOutTime < clockInTime) {
+      clockOutTime.setDate(clockOutTime.getDate() + 1);
+    }
+
+    return Math.round((clockOutTime - clockInTime) / (1000 * 60));
+  };
+
+  // Replace your existing getSalaryCycle with this:
+  const getSalaryCycle = (month, year) => {
+    const cycleStart = new Date(year, month - 1, 26);
+    let cycleEndYear = year;
+    let cycleEndMonth = month + 1;
+    if (cycleEndMonth > 12) {
+      cycleEndMonth = 1;
+      cycleEndYear = year + 1;
+    }
+    const cycleEnd = new Date(cycleEndYear, cycleEndMonth - 1, 25);
     return { cycleStart, cycleEnd };
   };
 
+
   const formatCycleLabel = (month, year) => {
     const { cycleStart, cycleEnd } = getSalaryCycle(month, year);
-    const fmt = (d) => d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-    return `${fmt(cycleStart)} – ${fmt(cycleEnd)}`;
+    const startDate = cycleStart.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    const endDate = cycleEnd.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    return `${startDate} – ${endDate}`;
   };
 
   const fetchMonthlyAttendance = async () => {
@@ -337,27 +394,43 @@ const AttendanceReports = () => {
       let url = `${API_ENDPOINTS.ATTENDANCE_REPORT}?start=${startDateStr}&end=${endDateStr}`;
       if (department !== 'all') url += `&department=${department}`;
 
+      console.log('🔄 Fetching monthly attendance for URL:', url);
+
       const response = await axios.get(url);
       const attendanceData = response.data.attendance || [];
 
+      console.log('📊 Raw Monthly Attendance Data:', attendanceData.length, 'records');
+
+      // DEBUG: Log first few records to see structure
+      if (attendanceData.length > 0) {
+        console.log('📋 Sample attendance record:', attendanceData[0]);
+      }
+
+      // Fetch leave data
       let leaveData = [];
       try {
-        const leaveResponse = await axios.get(API_ENDPOINTS.LEAVES);
-        leaveData = leaveResponse.data.filter(leave =>
+        const leaveResponse = await axios.get(`${API_ENDPOINTS.LEAVES}?all=true`);
+        leaveData = (leaveResponse.data || []).filter(leave =>
           leave.status === 'approved' &&
           new Date(leave.end_date) >= cycleStart &&
           new Date(leave.start_date) <= cycleEnd
         );
+        console.log('📊 Leave Data:', leaveData.length, 'records');
       } catch (error) {
-        console.log('Could not fetch leave data');
+        console.error('Could not fetch leave data:', error);
       }
 
-      // Holidays across the cycle range (may span 2 calendar months)
+      // Holidays across the cycle range
       const cycleHolidays = holidayData.filter(holiday => {
         const hd = new Date(holiday.date);
         return hd >= cycleStart && hd <= cycleEnd;
       });
 
+      console.log('📊 Cycle Holidays:', cycleHolidays.length);
+      console.log('📊 All Employees Count:', allEmployees.length);
+      console.log('📊 Filtered Department:', department);
+
+      // Process attendance data
       const processedData = processMonthlyAttendance(
         attendanceData,
         allEmployees,
@@ -367,7 +440,17 @@ const AttendanceReports = () => {
         cycleEnd
       );
 
+      console.log('✅ Processed Data Count:', processedData.length);
+
+      // DEBUG: Log sample processed data
+      if (processedData.length > 0) {
+        console.log('📋 Sample processed record:', processedData[0]);
+        console.log('📋 Sample processed record status:', processedData[0].status);
+      }
+
       setMonthlyAttendance(processedData);
+
+      // Calculate statistics
       calculateMonthlyStatistics(processedData);
 
     } catch (error) {
@@ -378,6 +461,14 @@ const AttendanceReports = () => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    // Calculate days in the salary cycle, not calendar month
+    const { cycleStart, cycleEnd } = getSalaryCycle(selectedMonth, selectedYear);
+    const diffTime = Math.abs(cycleEnd - cycleStart);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    setDaysInMonth(diffDays);
+  }, [selectedMonth, selectedYear]);
 
   const processMonthlyAttendance = (attendanceData, employees, leaveData, holidays, startDate, endDate) => {
     // Build total days in cycle
@@ -390,10 +481,14 @@ const AttendanceReports = () => {
 
     const processedData = [];
 
+    // ✅ Create attendance map for quick lookup
     const attendanceMap = {};
     attendanceData.forEach(record => {
       if (record.attendance_date) {
-        const dateStr = record.attendance_date.split('T')[0];
+        let dateStr = record.attendance_date;
+        if (dateStr.includes('T')) {
+          dateStr = dateStr.split('T')[0];
+        }
         if (dateStr && record.employee_id) {
           const key = `${record.employee_id}-${dateStr}`;
           attendanceMap[key] = record;
@@ -401,6 +496,9 @@ const AttendanceReports = () => {
       }
     });
 
+    console.log('📊 Attendance Map keys:', Object.keys(attendanceMap).length);
+
+    // ✅ Create leave map
     const leaveMap = {};
     leaveData.forEach(leave => {
       const leaveStart = new Date(leave.start_date);
@@ -419,6 +517,7 @@ const AttendanceReports = () => {
       }
     });
 
+    // ✅ Create holiday map
     const holidayMap = {};
     holidays.forEach(holiday => {
       const dateStr = holiday.date;
@@ -428,15 +527,16 @@ const AttendanceReports = () => {
       };
     });
 
+    // ✅ Filter employees by department if needed
     let filteredEmployees = employees;
     if (department !== 'all') {
       filteredEmployees = employees.filter(emp => emp.department === department);
     }
 
-    const today = new Date();
+    console.log('📊 Processing for employees:', filteredEmployees.length);
 
+    // ✅ Process each employee
     filteredEmployees.forEach(employee => {
-      // Get employee's shift timing to determine expected hours
       const shiftTiming = parseShiftTiming(employee.shift_timing);
       const expectedWorkHours = shiftTiming.totalHours || 9;
       const expectedWorkMinutes = expectedWorkHours * 60;
@@ -471,6 +571,7 @@ const AttendanceReports = () => {
         let overtimeHours = 0;
         let overtimeAmount = 0;
 
+        // ✅ Determine status based on priority
         if (isWeekend) {
           status = 'weekend';
           statusBadge = 'secondary';
@@ -497,11 +598,9 @@ const AttendanceReports = () => {
           compOffAwarded = dayAttendance.comp_off_awarded || false;
           compOffDays = dayAttendance.comp_off_days || 0;
 
-          // Calculate total minutes from clock in and out
+          // Calculate total minutes
           let totalMinutes = 0;
-
           if (clockIn && clockOut) {
-            // Parse times properly
             let clockInTime, clockOutTime;
 
             if (typeof clockIn === 'string' && clockIn.includes(' ')) {
@@ -522,7 +621,6 @@ const AttendanceReports = () => {
               clockOutTime = new Date(clockOut);
             }
 
-            // If clock_out is less than clock_in (crossed midnight), add 24 hours
             if (clockOutTime < clockInTime) {
               clockOutTime.setDate(clockOutTime.getDate() + 1);
             }
@@ -530,7 +628,6 @@ const AttendanceReports = () => {
             totalMinutes = Math.round((clockOutTime - clockInTime) / (1000 * 60));
             totalHours = totalMinutes / 60;
           } else if (clockIn && !clockOut && isToday) {
-            // Still working
             let clockInTime;
             if (typeof clockIn === 'string' && clockIn.includes(' ')) {
               const [inDatePart, inTimePart] = clockIn.split(' ');
@@ -548,60 +645,48 @@ const AttendanceReports = () => {
           overtimeHours = dayAttendance.overtime_hours != null ? dayAttendance.overtime_hours : Math.max(0, Math.floor(totalHours - expectedWorkHours));
           overtimeAmount = dayAttendance.overtime_amount != null ? dayAttendance.overtime_amount : (overtimeHours * 150);
 
-          // ✅ FIXED: Determine status based on total minutes vs expected work minutes
+          // ✅ Fix: Correct status determination for half_day
+          // ✅ CORRECT - Use the correct variable names
           if (clockIn && clockOut) {
+            const totalMinutes = calculateTotalMinutes(clockIn, clockOut); // Use clockIn, clockOut
+            const expectedWorkMinutes = 540; // 9 hours = 540 minutes
+
             if (totalMinutes >= expectedWorkMinutes) {
               status = 'present';
               statusBadge = 'success';
               statusIcon = '✓';
-              } else if (totalMinutes >= 300) {
+            } else if (totalMinutes >= 300) { // 5 hours or more
+              status = 'half_day';
+              statusBadge = 'warning';
+              statusIcon = '½';
+            } else {
+              status = 'absent';
               statusBadge = 'danger';
               statusIcon = '✗';
             }
-
-            tooltip = `In: ${formatShortTime(clockIn)} | Out: ${formatShortTime(clockOut)} | Hrs: ${Math.floor(totalMinutes / 60)}h ${totalMinutes % 60}m`;
-            if (lateMinutes > 0) {
-              tooltip += ` | Late: ${formatLateDisplay(lateMinutes)}`;
-            }
-            if (compOffAwarded) {
-              tooltip += ` | Comp-Off Earned: ${compOffDays} day`;
-            }
-            if (overtimeHours > 0) {
-              tooltip += ` | Overtime: ${overtimeHours}h (₹${overtimeAmount})`;
-            }
+          } else if (status === 'half_day') {
+            perEmployee[record.employee_id].half_day++;
+            perEmployee[record.employee_id].working_days_count++;
+            const hours = parseFloat(record.total_hours) || 0;
+            perEmployee[record.employee_id].total_hours += hours;
           }
           else if (clockIn && !clockOut && isToday) {
             status = 'working';
             statusBadge = 'info';
             statusIcon = '✓';
             tooltip = `Working since ${formatShortTime(clockIn)}`;
-            if (lateMinutes > 0) {
-              tooltip += ` | Late: ${formatLateDisplay(lateMinutes)}`;
-            }
-            if (compOffAwarded) {
-              tooltip += ` | Comp-Off Earned: ${compOffDays} day`;
-            }
-            if (overtimeHours > 0) {
-              tooltip += ` | Overtime: ${overtimeHours}h (₹${overtimeAmount})`;
-            }
+            if (lateMinutes > 0) tooltip += ` | Late: ${formatLateDisplay(lateMinutes)}`;
           }
           else if (clockIn) {
             status = 'present';
             statusBadge = 'success';
             statusIcon = '✓';
             tooltip = `In: ${formatShortTime(clockIn)} | No clock out`;
-            if (lateMinutes > 0) {
-              tooltip += ` | Late: ${formatLateDisplay(lateMinutes)}`;
-            }
-            if (compOffAwarded) {
-              tooltip += ` | Comp-Off Earned: ${compOffDays} day`;
-            }
-            if (overtimeHours > 0) {
-              tooltip += ` | Overtime: ${overtimeHours}h (₹${overtimeAmount})`;
-            }
+            if (lateMinutes > 0) tooltip += ` | Late: ${formatLateDisplay(lateMinutes)}`;
           }
         }
 
+        // ✅ Push to processed data
         processedData.push({
           id: `${employee.employee_id}-${dateStr}`,
           employee_id: employee.employee_id,
@@ -633,6 +718,7 @@ const AttendanceReports = () => {
       });
     });
 
+    console.log('✅ Processed Data Sample:', processedData.slice(0, 5));
     return processedData;
   };
 
@@ -681,6 +767,14 @@ const AttendanceReports = () => {
   };
 
   const calculateMonthlyStatistics = (data) => {
+    console.log('📊 calculateMonthlyStatistics called with data length:', data.length);
+
+    if (!data || data.length === 0) {
+      console.log('⚠️ No data to calculate statistics');
+      setMonthlyStats({});
+      return;
+    }
+
     const perEmployee = {};
 
     data.forEach(record => {
@@ -708,52 +802,41 @@ const AttendanceReports = () => {
         };
       }
 
-      // Status counting logic
-      if (record.status === 'present') {
+      // ✅ Status counting logic - IMPORTANT: Use record.status
+      const status = record.status;
+
+      if (status === 'present') {
         perEmployee[record.employee_id].present++;
-      } else if (record.status === 'half_day') {
+        perEmployee[record.employee_id].working_days_count++;
+        const hours = parseFloat(record.total_hours) || 0;
+        perEmployee[record.employee_id].total_hours += hours;
+      }
+      else if (status === 'half_day') {
         perEmployee[record.employee_id].half_day++;
-      } else if (record.status === 'absent') {
+        perEmployee[record.employee_id].working_days_count++;
+        const hours = parseFloat(record.total_hours) || 0;
+        perEmployee[record.employee_id].total_hours += hours;
+      }
+      else if (status === 'working') {
+        perEmployee[record.employee_id].working++;
+        perEmployee[record.employee_id].working_days_count++;
+        const hours = parseFloat(record.total_hours) || 0;
+        perEmployee[record.employee_id].total_hours += hours;
+      }
+      else if (status === 'absent') {
         perEmployee[record.employee_id].absent++;
-      } else if (record.status === 'on_leave') {
+      }
+      else if (status === 'on_leave') {
         perEmployee[record.employee_id].on_leave++;
         if (record.leave_type) {
           perEmployee[record.employee_id].leave_types.push(record.leave_type);
         }
-      } else if (record.status === 'working') {
-        perEmployee[record.employee_id].working++;
-      } else if (record.status === 'holiday') {
-        perEmployee[record.employee_id].holiday++;
-      } else if (record.status === 'weekend') {
-        perEmployee[record.employee_id].weekend++;
       }
-
-      // ✅ IMPORTANT: Add hours for present, half_day, and working days
-      if (record.status === 'present' || record.status === 'working' || record.status === 'half_day') {
-        perEmployee[record.employee_id].working_days_count++;
-
-        // Parse total_hours - handle both number and string
-        let hours = 0;
-        if (record.total_hours) {
-          hours = parseFloat(record.total_hours);
-        } else if (record.total_hours_display) {
-          // Parse from "Xh Ym" format
-          const match = record.total_hours_display.match(/(\d+)h\s*(\d*)m?/);
-          if (match) {
-            hours = parseInt(match[1]) + (parseInt(match[2] || 0) / 60);
-          }
-        } else if (record.clock_in && record.clock_out) {
-          // Calculate manually if needed
-          const clockInTime = new Date(record.clock_in);
-          let clockOutTime = new Date(record.clock_out);
-          if (clockOutTime < clockInTime) {
-            clockOutTime.setDate(clockOutTime.getDate() + 1);
-          }
-          const diffMinutes = (clockOutTime - clockInTime) / (1000 * 60);
-          hours = diffMinutes / 60;
-        }
-
-        perEmployee[record.employee_id].total_hours += hours;
+      else if (status === 'holiday') {
+        perEmployee[record.employee_id].holiday++;
+      }
+      else if (status === 'weekend') {
+        perEmployee[record.employee_id].weekend++;
       }
 
       // Late counting
@@ -762,17 +845,16 @@ const AttendanceReports = () => {
         perEmployee[record.employee_id].total_late_minutes += record.late_minutes || 0;
       }
 
-      // Comp-off counting
+      // Overtime
+      if (record.overtime_hours > 0) {
+        perEmployee[record.employee_id].overtime_hours += record.overtime_hours;
+        perEmployee[record.employee_id].overtime_amount += record.overtime_amount || 0;
+      }
+
+      // Comp-off
       if (record.comp_off_awarded) {
         perEmployee[record.employee_id].comp_off_count++;
         perEmployee[record.employee_id].total_comp_off_days += record.comp_off_days || 0;
-      }
-
-      // Overtime counting
-      if (record.overtime_hours > 0) {
-        perEmployee[record.employee_id].overtime_hours += record.overtime_hours;
-        perEmployee[record.employee_id].overtime_minutes += record.overtime_minutes || 0;
-        perEmployee[record.employee_id].overtime_amount += record.overtime_amount || 0;
       }
     });
 
@@ -781,19 +863,12 @@ const AttendanceReports = () => {
       const emp = perEmployee[empId];
       if (emp.working_days_count > 0) {
         emp.avg_hours = emp.total_hours / emp.working_days_count;
-      } else {
-        emp.avg_hours = 0;
-      }
-
-      if (emp.late_count > 0) {
-        emp.avg_late_minutes = (emp.total_late_minutes / emp.late_count).toFixed(1);
-        emp.late_display = formatLateDisplay(emp.total_late_minutes);
-      } else {
-        emp.avg_late_minutes = '0';
-        emp.late_display = '0';
       }
       emp.unique_leave_types = [...new Set(emp.leave_types)];
     });
+
+    console.log('📊 Monthly Stats calculated for', Object.keys(perEmployee).length, 'employees');
+    console.log('📊 Sample employee stats:', Object.values(perEmployee)[0]);
 
     setMonthlyStats(perEmployee);
   };
@@ -999,8 +1074,18 @@ const AttendanceReports = () => {
     }
   };
 
+  // Update the getStatusBadge function to show On Leave badge
   const getStatusBadge = (record) => {
     const lateDisplay = record.late_display || (record.late_minutes > 0 ? formatLateDisplay(record.late_minutes) : null);
+
+    // ✅ Show On Leave badge first
+    if (record.status === 'on_leave' || record.is_on_leave) {
+      return (
+        <Badge bg="purple" className="px-2 py-1 text-nowrap" style={{ backgroundColor: '#6f42c1' }}>
+          <FaUmbrellaBeach className="me-1" size={10} /> On Leave
+        </Badge>
+      );
+    }
 
     if (record.overtime_hours > 0) {
       return (
@@ -1033,7 +1118,6 @@ const AttendanceReports = () => {
         <Badge bg="success" className="px-2 py-1 text-nowrap">Present</Badge>;
     }
     if (record.status === 'half_day') return <Badge bg="warning" className="px-2 py-1 text-nowrap">Half Day</Badge>;
-    if (record.status === 'on_leave') return <Badge bg="purple" className="px-2 py-1 text-nowrap" style={{ backgroundColor: '#6f42c1' }}>On Leave</Badge>;
     if (record.status === 'holiday') return <Badge bg="warning" className="px-2 py-1 text-nowrap" style={{ backgroundColor: '#ffc107' }}>Holiday</Badge>;
     if (record.status === 'weekend') return <Badge bg="secondary" className="px-2 py-1 text-nowrap"><FaMoon className="me-1" size={10} /> W-OFF</Badge>;
     return <Badge bg="secondary" className="px-2 py-1 text-nowrap">Absent</Badge>;
@@ -1397,11 +1481,12 @@ const AttendanceReports = () => {
                         Employee
                       </th>
                       {[...Array(daysInMonth)].map((_, i) => {
-                        const dayIndex = i; // 0-based
+                        const dayIndex = i;
                         const { cycleStart } = getSalaryCycle(selectedMonth, selectedYear);
                         const currentDate = new Date(cycleStart);
                         currentDate.setDate(currentDate.getDate() + dayIndex);
                         const dayNum = currentDate.getDate();
+                        const monthNum = currentDate.getMonth() + 1;
                         const monthShort = currentDate.toLocaleDateString('en-IN', { month: 'short' });
                         const isCurrent = currentDate.toDateString() === new Date().toDateString();
                         const dayOfWeek = currentDate.getDay();
@@ -1411,7 +1496,7 @@ const AttendanceReports = () => {
                           <th key={i} className={`fw-normal small text-center ${isCurrent ? 'bg-primary text-white' : isWeekend ? 'bg-secondary text-white' : 'bg-light'}`}
                             style={{ minWidth: '30px', top: 0, zIndex: 10 }}>
                             {dayNum}
-                            <div className="small fw-normal d-none d-sm-block">{monthShort}</div>
+                            <div className="small fw-normal">{monthShort}</div>
                           </th>
                         );
                       })}
@@ -1458,39 +1543,58 @@ const AttendanceReports = () => {
                               let iconClass = 'text-muted';
                               let iconStyle = {};
 
+                              // In the calendar view section, update the icon for on_leave status
                               if (dayRecord) {
-                                if (dayRecord.overtime_hours > 0) {
+                                let iconTooltip = dayRecord.tooltip || 'No data';  // ✅ DECLARE AND INITIALIZE
+
+                                if (dayRecord.status === 'on_leave') {
+                                  statusIcon = 'L';
+                                  iconClass = 'text-purple';
+                                  iconStyle = { fontSize: '14px', fontWeight: 'bold' };
+                                  iconTooltip = `On Leave - ${dayRecord.leave_type || 'Leave'}`;
+                                } else if (dayRecord.overtime_hours > 0) {
                                   statusIcon = '⏰';
                                   iconClass = 'text-success fw-bold';
                                   iconStyle = { fontSize: '14px' };
+                                  iconTooltip = `Overtime: +${dayRecord.overtime_hours}h`;
                                 } else if (dayRecord.comp_off_awarded) {
                                   statusIcon = '🎉';
                                   iconClass = 'text-purple';
                                   iconStyle = { fontSize: '14px', color: '#9b59b6' };
+                                  iconTooltip = `Comp-Off Earned: ${dayRecord.comp_off_days} day(s)`;
                                 } else if (dayRecord.status === 'present' || dayRecord.status === 'working') {
                                   statusIcon = '✓';
-                                  iconClass = 'text-success fw-bold';
+                                  iconClass = dayRecord.is_late ? 'text-warning' : 'text-success fw-bold';
                                   iconStyle = { fontSize: '14px' };
+                                  iconTooltip = dayRecord.is_late
+                                    ? `Present (Late ${dayRecord.late_display || ''})`
+                                    : `Present - ${dayRecord.total_hours || 0}h`;
                                 } else if (dayRecord.status === 'half_day') {
                                   statusIcon = '½';
                                   iconClass = 'text-warning fw-bold';
                                   iconStyle = { fontSize: '14px' };
-                                } else if (dayRecord.status === 'on_leave') {
-                                  statusIcon = '🏖️';
-                                  iconClass = 'text-purple';
-                                  iconStyle = { fontSize: '14px' };
+                                  iconTooltip = `Half Day - ${dayRecord.total_hours || 0}h`;
+                                  if (dayRecord.is_late) {
+                                    iconTooltip += ` (Late ${dayRecord.late_display || ''})`;
+                                  }
                                 } else if (dayRecord.status === 'holiday') {
                                   statusIcon = '🎉';
                                   iconClass = 'text-warning';
                                   iconStyle = { fontSize: '14px' };
+                                  iconTooltip = `Holiday - ${dayRecord.holiday_name || 'Holiday'}`;
                                 } else if (dayRecord.status === 'weekend') {
                                   statusIcon = <FaMoon size={12} />;
                                   iconClass = 'text-secondary';
+                                  iconTooltip = 'Weekend Off';
                                 } else if (dayRecord.status === 'absent') {
                                   statusIcon = '✗';
                                   iconClass = 'text-danger fw-bold';
                                   iconStyle = { fontSize: '14px' };
+                                  iconTooltip = 'Absent';
                                 }
+
+                                // Add this to store iconTooltip for later use
+                                dayRecord.iconTooltip = iconTooltip;
                               }
 
                               return (
@@ -1544,11 +1648,11 @@ const AttendanceReports = () => {
 
                                         return (
                                           <span
-                                            title={iconTooltip}
-                                            className={iconColor}
-                                            style={{ cursor: 'pointer', fontSize: '14px', fontWeight: 'bold' }}
+                                            title={dayRecord.iconTooltip || dayRecord.tooltip || 'No data'}  // ✅ Use stored iconTooltip
+                                            className={iconClass}
+                                            style={{ cursor: 'pointer', fontSize: '14px', fontWeight: 'bold', ...iconStyle }}
                                           >
-                                            {typeof icon === 'string' ? icon : icon}
+                                            {typeof statusIcon === 'string' ? statusIcon : statusIcon}
                                             {dayRecord.is_late && dayRecord.status !== 'on_leave' && dayRecord.status !== 'holiday' && dayRecord.status !== 'weekend' && (
                                               <sup className="text-warning fw-bold">*</sup>
                                             )}

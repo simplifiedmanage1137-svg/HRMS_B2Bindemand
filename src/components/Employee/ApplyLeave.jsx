@@ -282,12 +282,28 @@ const ApplyLeave = () => {
       return;
     }
 
+    // For half day, always 0.5 days
     if (formData.leave_duration === 'Half Day') {
       setCalculatedDays(0.5);
       return;
     }
 
+    // For full day, calculate only working days (Monday to Friday)
     if (!formData.end_date) {
+      // Single day leave - check if it's a working day
+      const startDate = new Date(formData.start_date);
+      const dayOfWeek = startDate.getDay(); // 0 = Sunday, 6 = Saturday
+
+      if (dayOfWeek === 0 || dayOfWeek === 6) {
+        // Weekend - can't apply leave on weekend
+        setErrors(prev => ({
+          ...prev,
+          start_date: 'Cannot apply leave on weekend (Saturday/Sunday). Please select a working day.'
+        }));
+        setCalculatedDays(0);
+        return;
+      }
+
       setCalculatedDays(1);
       return;
     }
@@ -304,10 +320,32 @@ const ApplyLeave = () => {
       return;
     }
 
-    const diffTime = Math.abs(end - start);
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    // Calculate only working days (Monday to Friday)
+    let workingDays = 0;
+    let currentDate = new Date(start);
 
-    setCalculatedDays(diffDays);
+    while (currentDate <= end) {
+      const dayOfWeek = currentDate.getDay(); // 0 = Sunday, 6 = Saturday
+
+      // Count only weekdays (Monday to Friday)
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+        workingDays++;
+      }
+
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    // If no working days selected, show error
+    if (workingDays === 0) {
+      setErrors(prev => ({
+        ...prev,
+        start_date: 'Selected date range has no working days (Monday-Friday). Please select working days.'
+      }));
+      setCalculatedDays(0);
+      return;
+    }
+
+    setCalculatedDays(workingDays);
     setErrors(prev => ({ ...prev, end_date: '' }));
   };
 
@@ -341,6 +379,13 @@ const ApplyLeave = () => {
 
     if (!formData.start_date) {
       newErrors.start_date = 'Start date is required';
+    } else {
+      // Check if start date is weekend
+      const startDate = new Date(formData.start_date);
+      const startDay = startDate.getDay();
+      if (startDay === 0 || startDay === 6) {
+        newErrors.start_date = 'Cannot apply leave on weekend (Saturday/Sunday). Please select a working day.';
+      }
     }
 
     if (formData.leave_duration === 'Half Day' && !formData.half_day_type) {
@@ -353,6 +398,27 @@ const ApplyLeave = () => {
 
     if (formData.start_date && formData.end_date && formData.start_date > formData.end_date) {
       newErrors.end_date = 'End date cannot be before start date';
+    }
+
+    // Check if entire range has any working days
+    if (formData.start_date && formData.end_date && formData.leave_duration === 'Full Day') {
+      const start = new Date(formData.start_date);
+      const end = new Date(formData.end_date);
+      let hasWorkingDay = false;
+      let currentDate = new Date(start);
+
+      while (currentDate <= end) {
+        const dayOfWeek = currentDate.getDay();
+        if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+          hasWorkingDay = true;
+          break;
+        }
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+
+      if (!hasWorkingDay) {
+        newErrors.end_date = 'Selected date range has no working days (Monday-Friday). Please select working days.';
+      }
     }
 
     if (!formData.reason) {
@@ -379,6 +445,49 @@ const ApplyLeave = () => {
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
+
+  // Helper function to get working days in range
+const getWorkingDaysInRange = (startDate, endDate) => {
+  if (!startDate || !endDate) return [];
+  
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const workingDays = [];
+  let currentDate = new Date(start);
+  
+  while (currentDate <= end) {
+    const dayOfWeek = currentDate.getDay();
+    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+      workingDays.push(new Date(currentDate));
+    }
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
+  
+  return workingDays;
+};
+
+// Add this in the UI to show preview (optional)
+{formData.start_date && formData.end_date && formData.leave_duration === 'Full Day' && (
+  <Alert variant="info" className="mt-2 py-2 small">
+    <div className="d-flex align-items-start">
+      <FaInfoCircle className="me-2 mt-1 flex-shrink-0" size={12} />
+      <div>
+        <strong>Working days in selected range:</strong>
+        <ul className="mb-0 mt-1 ps-3">
+          {getWorkingDaysInRange(formData.start_date, formData.end_date).map((date, idx) => (
+            <li key={idx}>
+              {date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' })}
+            </li>
+          ))}
+        </ul>
+        <small className="text-muted mt-1 d-block">
+          Total leave days: {calculatedDays} working day{calculatedDays !== 1 ? 's' : ''}
+          (Weekends are automatically excluded)
+        </small>
+      </div>
+    </div>
+  </Alert>
+)}
 
   const handleSubmit = async (e) => {
     e.preventDefault();
