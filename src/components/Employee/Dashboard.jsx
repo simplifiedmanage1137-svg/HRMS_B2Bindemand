@@ -374,15 +374,22 @@ const EmployeeDashboard = () => {
 
   const fetchCompOffHistory = async () => {
     try {
-      const response = await axios.get(`${API_ENDPOINTS.ATTENDANCE}/comp-off/${user.employeeId}/history`);
-      setCompOffHistory(response.data.earnings || []);
-      const earned = response.data.earnings?.filter(e => !e.is_used).length || 0;
-      setStats(prev => ({
-        ...prev,
-        compOffEarned: earned
-      }));
+      // Only fetch if user is logged in
+      if (!user?.employeeId) return;
+
+      const response = await axios.get(
+        `${API_ENDPOINTS.ATTENDANCE}/comp-off/${user.employeeId}/history`
+      );
+
+      if (response.data.success) {
+        setCompOffHistory(response.data.earnings || []);
+      }
     } catch (error) {
-      console.log('Comp-off history not available for employees');
+      // Don't show error for 403 - it's expected for regular employees
+      if (error.response?.status !== 403) {
+        console.error('Error fetching comp-off history:', error);
+      }
+      // Silently fail - comp-off feature might not be available
       setCompOffHistory([]);
     }
   };

@@ -1467,7 +1467,7 @@ const AdminDashboard = () => {
             <FaChartBar className="me-2" />
             Overview
           </Button>
-        
+
           <Button
             variant={activeTab === 'birthdays' ? 'info' : 'outline-secondary'}
             onClick={() => setActiveTab('birthdays')}
@@ -1565,7 +1565,6 @@ const AdminDashboard = () => {
                   <option value="name">Sort by Name</option>
                   <option value="department">Sort by Dept</option>
                   <option value="years">Sort by Years</option>
-                  <option value="month">Sort by Month</option>
                 </Form.Select>
               </Col>
               <Col xs={6} md={1}>
@@ -1590,18 +1589,148 @@ const AdminDashboard = () => {
               <Table striped hover className="mb-0 align-middle">
                 <thead className="bg-light sticky-top">
                   <tr className="small">
-                    <th className="fw-normal text-center" style={{ width: '5%' }}>#</th>
-                    <th className="fw-normal" style={{ width: '20%' }}>Employee</th>
-                    <th className="fw-normal d-none d-md-table-cell" style={{ width: '15%' }}>Department</th>
-                    <th className="fw-normal" style={{ width: '12%' }}>Joining Date</th>
-                    <th className="fw-normal" style={{ width: '15%' }}>Years</th>
-                    <th className="fw-normal" style={{ width: '10%' }}>Status</th>
-                    <th className="fw-normal" style={{ width: '8%' }}>Celebration</th>
+                    <th className="fw-normal text-center">#</th>
+                    <th className="fw-normal">Employee</th>
+                    <th className="fw-normal d-none d-md-table-cell">Department</th>
+                    <th className="fw-normal">Joining Date</th>
+                    <th className="fw-normal">Years Completed</th>
+                    <th className="fw-normal">Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredAnniversaries.length > 0 ? (
                     filteredAnniversaries.map((emp, index) => (
+                      <tr key={emp.id} className={emp.status === 'today' ? 'table-warning' : ''}>
+                        <td className="text-center">{index + 1}</td>
+                        <td className="small">
+                          <div className="fw-semibold text-truncate">{emp.first_name} {emp.last_name}</div>
+                          <small className="text-muted">{emp.employee_id}</small>
+                        </td>
+                        <td className="small d-none d-md-table-cell">{emp.department}</td>
+                        <td className="small">
+                          <Badge bg="light" text="dark" pill>{formatDate(emp.joining_date)}</Badge>
+                        </td>
+                        <td className="small">
+                          <Badge bg="warning" pill>{emp.yearsCompleted} Year{emp.yearsCompleted !== 1 ? 's' : ''}</Badge>
+                        </td>
+                        <td className="small">
+                          {emp.status === 'today' ? (
+                            <Badge bg="success" pill>🎉 Today!</Badge>
+                          ) : emp.status === 'upcoming' ? (
+                            <Badge bg="info" pill>Upcoming ({emp.daysLeft}d)</Badge>
+                          ) : (
+                            <Badge bg="secondary" pill>Passed</Badge>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="6" className="text-center py-4">
+                        <FaTrophy size={40} className="text-muted mb-2 opacity-50" />
+                        <p className="text-muted mb-0">No anniversaries found</p>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </Table>
+            </div>
+          </Card.Body>
+        </Card>
+      )}
+
+      {activeTab === 'birthdays' && (
+        <Card className="border-0 shadow-sm">
+          <Card.Header className="bg-gradient py-3" style={{ background: 'linear-gradient(135deg, #ff6b6b 0%, #ff8e8e 100%)' }}>
+            <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
+              <div>
+                <h5 className="mb-1 d-flex align-items-center">
+                  <FaBirthdayCake className="me-2" size={20} />
+                  Employee Birthdays
+                </h5>
+                <p className="mb-0 text-muted small">Complete list of all {allBirthdays.length} employee birthdays</p>
+              </div>
+              <Badge bg="dark" pill className="px-3 py-2">
+                Total: {allBirthdays.length} Employees
+              </Badge>
+            </div>
+          </Card.Header>
+          <Card.Body className="p-3">
+            {/* Filters Row */}
+            <Row className="mb-3 g-2">
+              <Col xs={12} md={3}>
+                <div className="d-flex align-items-center bg-light rounded-3 p-1">
+                  <FaSearch className="ms-2 text-muted" size={14} />
+                  <Form.Control
+                    type="text"
+                    placeholder="Search by name or ID..."
+                    value={birthdaySearch}
+                    onChange={(e) => setBirthdaySearch(e.target.value)}
+                    className="border-0 bg-transparent"
+                    size="sm"
+                  />
+                </div>
+              </Col>
+              <Col xs={6} md={2}>
+                <Form.Select size="sm" value={birthdayFilter} onChange={(e) => setBirthdayFilter(e.target.value)}>
+                  <option value="all">All Birthdays</option>
+                  <option value="today">Today's Birthdays</option>
+                  <option value="upcoming">Upcoming</option>
+                  <option value="passed">Passed (This Year)</option>
+                  <option value="thisMonth">This Month</option>
+                </Form.Select>
+              </Col>
+              <Col xs={6} md={2}>
+                <Form.Select size="sm" value={birthdayDepartmentFilter} onChange={(e) => setBirthdayDepartmentFilter(e.target.value)}>
+                  <option value="all">All Departments</option>
+                  {uniqueDepartments.map(dept => (
+                    <option key={dept} value={dept}>{dept}</option>
+                  ))}
+                </Form.Select>
+              </Col>
+              <Col xs={6} md={2}>
+                <Form.Select size="sm" value={birthdaySort} onChange={(e) => setBirthdaySort(e.target.value)}>
+                  <option value="date">Sort by Date</option>
+                  <option value="name">Sort by Name</option>
+                  <option value="department">Sort by Dept</option>
+                  <option value="month">Sort by Month</option>
+                </Form.Select>
+              </Col>
+              <Col xs={6} md={1}>
+                <Button variant="outline-secondary" size="sm" onClick={() => setBirthdaySortOrder(birthdaySortOrder === 'asc' ? 'desc' : 'asc')} className="w-100">
+                  {birthdaySortOrder === 'asc' ? <FaSortUp /> : <FaSortDown />}
+                </Button>
+              </Col>
+              <Col xs={12} md={2}>
+                <Button variant="outline-warning" size="sm" onClick={() => {
+                  setBirthdaySearch('');
+                  setBirthdayFilter('all');
+                  setBirthdayDepartmentFilter('all');
+                  setBirthdaySort('date');
+                  setBirthdaySortOrder('asc');
+                }} className="w-100">
+                  <FaFilter className="me-1" size={12} /> Clear
+                </Button>
+              </Col>
+            </Row>
+
+            {/* Birthdays Table */}
+            <div className="table-responsive" style={{ maxHeight: 'calc(100vh - 350px)', overflowY: 'auto' }}>
+              <Table striped hover className="mb-0 align-middle">
+                <thead className="bg-light sticky-top">
+                  <tr className="small">
+                    <th className="fw-normal text-center" style={{ width: '5%' }}>#</th>
+                    <th className="fw-normal" style={{ width: '20%' }}>Employee</th>
+                    <th className="fw-normal d-none d-md-table-cell" style={{ width: '15%' }}>Department</th>
+                    <th className="fw-normal" style={{ width: '12%' }}>Birth Date</th>
+                    <th className="fw-normal" style={{ width: '10%' }}>Age</th>
+                    <th className="fw-normal" style={{ width: '10%' }}>Status</th>
+                    <th className="fw-normal" style={{ width: '8%' }}>Celebration</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredBirthdays.length > 0 ? (
+                    filteredBirthdays.map((emp, index) => (
                       <tr key={emp.id} className={emp.status === 'today' ? 'table-warning' : ''}>
                         <td className="text-center">{index + 1}</td>
                         <td className="small">
@@ -1616,33 +1745,34 @@ const AdminDashboard = () => {
                         <td className="small">
                           <Badge bg="light" text="dark" pill className="px-2 py-1">
                             <FaCalendarAlt className="me-1" size={10} />
-                            {formatDate(emp.joining_date)}
+                            {emp.birthdayDate}
                           </Badge>
                         </td>
                         <td className="small">
-                          <Badge bg="warning" pill className="px-2 py-1">
+                          <Badge bg="info" pill className="px-2 py-1">
                             <FaStar className="me-1" size={10} />
-                            {emp.yearsCompleted} Year{emp.yearsCompleted !== 1 ? 's' : ''}
+                            {emp.age} years
                           </Badge>
                         </td>
                         <td className="small">
                           {emp.status === 'today' ? (
                             <Badge bg="success" pill className="px-2 py-1">
-                              <FaTrophy className="me-1" size={10} /> Today
+                              <FaBirthdayCake className="me-1" size={10} /> Today
                             </Badge>
                           ) : emp.status === 'upcoming' ? (
-                            <Badge bg="info" pill>Upcoming</Badge>
+                            <Badge bg="info" pill>Upcoming ({emp.daysLeft}d left)</Badge>
                           ) : (
-                            <Badge bg="secondary" pill>Past</Badge>
+                            <Badge bg="secondary" pill>Passed</Badge>
                           )}
                         </td>
                         <td className="small">
-                          {emp.yearsCompleted === 1 && <Badge bg="info" pill>1st Year 🎉</Badge>}
-                          {emp.yearsCompleted === 5 && <Badge bg="primary" pill>5 Years 🏆</Badge>}
-                          {emp.yearsCompleted === 10 && <Badge bg="success" pill>10 Years 🎊</Badge>}
-                          {emp.yearsCompleted === 20 && <Badge bg="danger" pill>20 Years 👑</Badge>}
-                          {![1, 5, 10, 20].includes(emp.yearsCompleted) && emp.yearsCompleted > 0 && (
-                            <Badge bg="secondary" pill>{emp.yearsCompleted} Years</Badge>
+                          {emp.age === 18 && <Badge bg="info" pill>🎂 Adult</Badge>}
+                          {emp.age === 21 && <Badge bg="primary" pill>🎉 21st Birthday</Badge>}
+                          {emp.age === 30 && <Badge bg="success" pill>🎊 30th Birthday</Badge>}
+                          {emp.age === 40 && <Badge bg="warning" pill>🎈 40th Birthday</Badge>}
+                          {emp.age === 50 && <Badge bg="danger" pill>👑 Golden Jubilee</Badge>}
+                          {![18, 21, 30, 40, 50].includes(emp.age) && emp.age > 0 && (
+                            <Badge bg="secondary" pill>{emp.age} years</Badge>
                           )}
                         </td>
                       </tr>
@@ -1650,17 +1780,17 @@ const AdminDashboard = () => {
                   ) : (
                     <tr>
                       <td colSpan="7" className="text-center py-4">
-                        <FaTrophy size={40} className="text-muted mb-2 opacity-50" />
-                        <p className="text-muted mb-0">No anniversaries found matching the filters</p>
+                        <FaBirthdayCake size={40} className="text-muted mb-2 opacity-50" />
+                        <p className="text-muted mb-0">No birthdays found matching the filters</p>
                       </td>
                     </tr>
                   )}
                 </tbody>
               </Table>
             </div>
-            {filteredAnniversaries.length > 0 && (
+            {filteredBirthdays.length > 0 && (
               <div className="mt-3 text-center text-muted small">
-                Showing {filteredAnniversaries.length} of {allAnniversaries.length} anniversaries
+                Showing {filteredBirthdays.length} of {allBirthdays.length} birthdays
               </div>
             )}
           </Card.Body>
