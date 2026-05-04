@@ -18,7 +18,7 @@ import {
   FaCloudSun,
   FaHistory,
   FaRegClock,
-   FaUmbrellaBeach  
+  FaUmbrellaBeach
 } from 'react-icons/fa';
 import axios from '../../config/axios';
 import API_ENDPOINTS from '../../config/api';
@@ -2146,31 +2146,26 @@ const Attendance = () => {
                                   {record.isWeeklyOff && <Badge bg="secondary" className="ms-1" pill>OFF</Badge>}
                                 </div>
                               </td>
-                              <td className="small fw-bold">
+                              <td className="small">
                                 {record.isWeeklyOff ? (
                                   <span className="text-muted">-</span>
                                 ) : record.is_on_leave ? (
-                                  <span className="text-purple">-</span>  // Show "-" for leave days
-                                ) : record.total_hours_display ? (
-                                  <span className="text-nowrap">
-                                    {record.total_hours_display}
-                                    {record.clock_in && !record.clock_out && !record.is_regularized && !record.isToday && (
-                                      <span className="text-danger ms-1" style={{ fontSize: '10px' }}>(Missed)</span>
-                                    )}
-                                  </span>
-                                ) : record.total_hours ? (
-                                  <span className="text-nowrap">
-                                    {record.total_hours.toFixed(1)}h
-                                    {record.clock_in && !record.clock_out && !record.is_regularized && !record.isToday && (
-                                      <span className="text-danger ms-1" style={{ fontSize: '10px' }}>(Missed)</span>
-                                    )}
-                                  </span>
-                                ) : record.clock_in && !record.clock_out && isToday ? (
-                                  <span className="text-nowrap text-info">
-                                    {record.current_hours_display || calculateCurrentWorkingHours(record.clock_in)?.display || '0h 0m'}
-                                  </span>
+                                  <span className="text-purple">-</span>
+                                ) : record.formatted_clock_in ? (
+                                  <span className="text-nowrap fw-semibold">{record.formatted_clock_in}</span>
+                                ) : record.clock_in ? (
+                                  <span className="text-nowrap fw-semibold">{formatTimeIST(record.clock_in)}</span>
+                                ) : record.clock_in && isToday ? (
+                                  <Badge bg="info" pill size="sm">Not Clocked</Badge>
                                 ) : (
-                                  '-'
+                                  <span className="text-muted">---</span>
+                                )}
+                                {/* Show late indicator if applicable */}
+                                {record.late_display && record.late_minutes > 0 && (
+                                  <small className="text-danger d-block" style={{ fontSize: '9px' }}>
+                                    <FaExclamationTriangle className="me-1" size={8} />
+                                    Late {record.late_display}
+                                  </small>
                                 )}
                               </td>
                               <td className="small">
