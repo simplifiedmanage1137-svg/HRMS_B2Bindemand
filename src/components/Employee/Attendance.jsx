@@ -139,6 +139,41 @@ const Attendance = () => {
     return new Date(year, month - 1, day, hour, minute, second);
   };
 
+  // Add this function at the top of Attendance.jsx component
+  const isMobileDevice = () => {
+    // Check for mobile devices using screen width
+    const isMobileWidth = window.innerWidth <= 768;
+
+    // Check user agent for mobile devices
+    const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+    const mobileRegex = /android|webos|iphone|ipad|ipod|blackberry|windows phone|iemobile|opera mini/i;
+    const isMobileUA = mobileRegex.test(userAgent.toLowerCase());
+
+    // Check for touch screen and screen size
+    const isTouchScreen = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
+    const isMobile = isMobileUA || (isTouchScreen && isMobileWidth);
+
+    console.log('📱 Device Detection:', {
+      isMobileUA,
+      isMobileWidth,
+      isTouchScreen,
+      isMobile
+    });
+
+    return isMobile;
+  };
+
+  // Add this function to get device type name
+  const getDeviceType = () => {
+    const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+
+    if (/android/i.test(userAgent)) return 'Android Mobile';
+    if (/iPad|iPhone|iPod/.test(userAgent)) return 'iOS Mobile';
+    if (/windows|mac|linux|cros/i.test(userAgent) && !/mobile/i.test(userAgent)) return 'Desktop/Laptop';
+    return 'Unknown';
+  };
+
   // Calculate total minutes between two times with proper cross-midnight support
   const calculateTotalMinutesFixed = (clockInStr, clockOutOrCurrentStr) => {
     if (!clockInStr || !clockOutOrCurrentStr) return 0;
@@ -1140,6 +1175,17 @@ const Attendance = () => {
   });
 
   const handleClockIn = async () => {
+    // ✅ Check if mobile device
+    if (isMobileDevice()) {
+      const deviceType = getDeviceType();
+      setMessage({
+        type: 'danger',
+        text: `❌ Clock In is not allowed from ${deviceType} devices. Please use a laptop or desktop computer to mark your attendance.`
+      });
+      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+      return;
+    }
+
     setLoading(true);
     setMessage({ type: '', text: '' });
 
@@ -1171,7 +1217,9 @@ const Attendance = () => {
         employee_id: user.employeeId,
         latitude: null,
         longitude: null,
-        accuracy: null
+        accuracy: null,
+        device_type: getDeviceType(),  // Send device type to backend
+        is_mobile: isMobileDevice()    // Send mobile flag
       });
 
       console.log('✅ Clock-in response:', response.data);
@@ -1248,6 +1296,17 @@ const Attendance = () => {
   };
 
   const handleClockOut = async () => {
+    // ✅ Check if mobile device
+    if (isMobileDevice()) {
+      const deviceType = getDeviceType();
+      setMessage({
+        type: 'danger',
+        text: `❌ Clock Out is not allowed from ${deviceType} devices. Please use a laptop or desktop computer to mark your attendance.`
+      });
+      setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+      return;
+    }
+
     setLoading(true);
     try {
       const missedResponse = await axios.get(API_ENDPOINTS.ATTENDANCE_MISSED_CLOCKOUTS(user.employeeId));
@@ -1260,7 +1319,9 @@ const Attendance = () => {
         const response = await axios.post(`${API_ENDPOINTS.ATTENDANCE}/clock-out-missed`, {
           employee_id: user.employeeId,
           attendance_id: incompleteRecord.id,
-          attendance_date: incompleteRecord.attendance_date
+          attendance_date: incompleteRecord.attendance_date,
+          device_type: getDeviceType(),
+          is_mobile: isMobileDevice()
         });
 
         console.log('✅ Clock-out response:', response.data);
@@ -1302,7 +1363,9 @@ const Attendance = () => {
         session_id: sessionId,
         latitude: null,
         longitude: null,
-        accuracy: null
+        accuracy: null,
+        device_type: getDeviceType(),
+        is_mobile: isMobileDevice()
       });
 
       console.log('✅ Clock-out response:', response.data);
@@ -1458,6 +1521,21 @@ const Attendance = () => {
 
   const renderClockButton = () => {
     const hasIncompleteRecord = missedClockOuts.some(r => !r.has_clock_out && !r.is_regularized);
+    const isMobile = isMobileDevice();
+
+    if (isMobile) {
+      return (
+        <div className="text-center">
+          <Button variant="secondary" size="lg" className="w-100 py-3" disabled>
+            <FaMapMarkerAlt className="me-2" />
+            {hasIncompleteRecord || activeSession ? 'Clock Out' : 'Clock In'} (Not Allowed on Mobile)
+          </Button>
+          <small className="text-danger d-block mt-2">
+            ⚠️ Please use laptop/desktop for attendance
+          </small>
+        </div>
+      );
+    }
 
     if (hasIncompleteRecord || activeSession) {
       return (
@@ -1645,6 +1723,24 @@ const Attendance = () => {
         <FaClock className="me-2 text-primary" />
         Attendance Management
       </h5>
+
+      <Card className="mb-3 border-0 shadow-sm bg-light">
+        <Card.Body className="p-2">
+          <div className="d-flex align-items-center justify-content-between">
+            <div>
+              <small className="text-muted">Device Type:</small>
+              <strong className="ms-2">
+                {isMobileDevice() ? (
+                  <span className="text-danger">📱 Mobile Device (Not Allowed for Attendance)</span>
+                ) : (
+                  <span className="text-success">💻 Desktop/Laptop (Allowed)</span>
+                )}
+              </strong>
+            </div>
+            <small className="text-muted">{getDeviceType()}</small>
+          </div>
+        </Card.Body>
+      </Card>
 
       {/* Regularization Requests Section */}
       {missedClockOuts.length > 0 && (
